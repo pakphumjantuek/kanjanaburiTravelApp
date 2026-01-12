@@ -272,7 +272,7 @@ export default function PlaceListScreen() {
                     </View>
                   )}
 
-                  {/* Favorite Icon */}
+                  {/* Favorite Icon - ไม่สามารถกดได้ตอนนี้ */}
                   <View style={styles.favoriteBtn}>
                     <Ionicons name="heart-outline" size={18} color="#fff" />
                   </View>
@@ -288,19 +288,7 @@ export default function PlaceListScreen() {
                     {item.description || "ไม่มีรายละเอียด"}
                   </Text>
 
-                  {/* Footer */}
-                  <View style={styles.placeFooter}>
-                    <View style={styles.locationRow}>
-                      <Ionicons name="location" size={14} color="#FF7754" />
-                      <Text style={styles.locationText} numberOfLines={1}>
-                        {item.locationName || item.district || "ไม่ระบุตำแหน่ง"}
-                      </Text>
-                    </View>
-
-                    <View style={styles.arrowBtn}>
-                      <Ionicons name="chevron-forward" size={16} color="#2A4D50" />
-                    </View>
-                  </View>
+                 
                 </View>
               </TouchableOpacity>
             );

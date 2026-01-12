@@ -39,6 +39,8 @@ export type RootStackParamList = {
   RecommendAdminScreen: undefined;
 
   //อาหารท้องถิ่น
+  LocalDishUserListScreen: undefined;
+  LocalDishDetailScreen: { dishId: number };
   LocalDishListScreen: undefined;
   LocalDishFormScreen: { mode: "add" } | { mode: "edit"; dishId: number};
 };

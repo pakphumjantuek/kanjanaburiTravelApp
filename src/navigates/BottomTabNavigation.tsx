@@ -1,5 +1,5 @@
 import React from "react";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { FontAwesome6, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSelector } from "react-redux";
 import { useGetProfileQuery } from "../features/auth/authApi";
@@ -8,6 +8,7 @@ import PlaceStackNavigation from "./PlaceStackNavigation";
 import TripStackNavigation from "./TripStackNavigation";
 import AuthStackNavigation from "./AuthStackNavigation";
 import { HomeScreen } from "../screen";
+import LocalDishStackNavigation from "./LocalDishStackNavigation";
 
 const Tab = createBottomTabNavigator();
 
@@ -28,6 +29,9 @@ export default function BottomTabNavigation() {
           }
           if (route.name === "สถานที่") {
             return <Ionicons name="list" size={size} color={color} />;
+          }
+           if (route.name === "อาหาร") {
+            return <FontAwesome6 name="bowl-food" size={size} color={color} />;
           }
           if (route.name === "ทริปของฉัน") {
             return <Ionicons name="map" size={size} color={color} />;
@@ -52,6 +56,8 @@ export default function BottomTabNavigation() {
     >
       <Tab.Screen name="หน้าเเรก" component={HomeScreen} />
       <Tab.Screen name="สถานที่" component={PlaceStackNavigation} />
+      <Tab.Screen name="อาหาร" component={LocalDishStackNavigation} />
+
       {isLoggedIn && (
         <Tab.Screen name="ทริปของฉัน" component={TripStackNavigation} />
       )}

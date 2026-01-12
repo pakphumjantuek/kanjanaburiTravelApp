@@ -94,9 +94,7 @@ export default function PlaceFormScreen() {
     ? (placeIdFromParams as number)
     : undefined;
   const placeFromState = isEditMode ? (params as any).place : undefined;
-
-  console.log("PlaceFormScreen params:", params, " | placeId:", placeId);
-
+  
   const { data: placeFromApi, isLoading: loadingPlace } = useGetByIdQuery(
     placeId as number,
     { skip: !isEditMode || !placeId }
