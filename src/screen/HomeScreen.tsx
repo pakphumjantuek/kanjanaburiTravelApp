@@ -250,6 +250,7 @@ export default function HomeScreen() {
                 const imageUrl = p.coverImageUrl
                   ? getImageUrl(p.coverImageUrl)
                   : "https://via.placeholder.com/400x300?text=No+Image";
+                  
 
                 return (
                   <TouchableOpacity
