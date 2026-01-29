@@ -13,10 +13,14 @@ export interface PlaceDto {
   categoryId?: number;
   categoryName?: string;
   isActive?: boolean;
+  averageRating?: number;
+  reviewCount?: number;
 
   categories: string[];
   tags: string[];
   images: PlaceImageDto[];
+
+  distanceKm?: number | null;
 }
 
 export interface CreatePlaceRequest {
@@ -39,3 +43,22 @@ export interface PlaceImageDto {
   imageUrl: string;
   isCover: boolean;
 }
+
+export type UpsertPlaceDishPayload = {
+  dishId: number;
+  price?: number | null;
+  isAvailable: boolean;
+};
+
+// รายการเมนูของร้าน (ตอนอ่านกลับ)
+export type DishForPlaceDto = {
+  dishId: number;
+  nameTH: string;
+  nameEN?: string | null;
+  spicyLevel: number;
+  isHalal: boolean;
+  isVegetarian: boolean;
+  price?: number | null;
+  isAvailable: boolean;
+  coverImageUrl?: string | null;
+};

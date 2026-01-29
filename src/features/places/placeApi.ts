@@ -2,7 +2,7 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 import type { ApiResponse } from "../../api/ApiResponse";
 import { baseQueryWithReauth } from "../../api/baseQuery";
 import type { PagedResult } from "../../interfaces/PagedResult";
-import type { CreatePlaceRequest, PlaceDto } from "./placeTypes";
+import type { CreatePlaceRequest, DishForPlaceDto, PlaceDto, UpsertPlaceDishPayload } from "./placeTypes";
 
 export type RNFile = {
   uri: string;
@@ -113,6 +113,36 @@ export const placeApi = createApi({
       }),
       invalidatesTags: ["Place"],
     }),
+      getDishesByPlaceId: builder.query<DishForPlaceDto[], number>({
+      query: (placeId) => `/place/${placeId}/dishes`,
+      transformResponse: (res: ApiResponse<DishForPlaceDto[]>) => {
+        if (!res.isSuccess)
+          throw new Error(res.errorMessages?.[0] ?? "โหลดเมนูไม่สำเร็จ");
+        return res.result ?? [];
+      },
+      providesTags: ["Place"],
+    }),
+    upsertDishToPlace: builder.mutation<
+      void,
+      { placeId: number; body: UpsertPlaceDishPayload }
+    >({
+      query: ({ placeId, body }) => ({
+        url: `/place/${placeId}/dishes`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Place"],
+    }),
+    deleteDishFromPlace: builder.mutation<
+      void,
+      { placeId: number; dishId: number }
+    >({
+      query: ({ placeId, dishId }) => ({
+        url: `/place/${placeId}/dishes/${dishId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Place"],
+    }),   
   }),
 });
 
@@ -124,4 +154,7 @@ export const {
   useDeletePlaceMutation,
   useUploadPlaceImagesBatchMutation,
   useDeletePlaceImageMutation,
+  useGetDishesByPlaceIdQuery,
+  useUpsertDishToPlaceMutation,
+  useDeleteDishFromPlaceMutation,
 } = placeApi;

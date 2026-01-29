@@ -67,6 +67,7 @@ export const placeCategoryApi = createApi({
 
 export const {
   useGetAllPlaceCategoryQuery,
+  useGetByIdQuery,
   useCreatePlaceCategoryMutation,
   useUpdatePlaceCategoryMutation,
   useDeletePlaceCategoryMutation,

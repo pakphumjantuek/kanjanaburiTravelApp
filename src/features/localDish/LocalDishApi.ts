@@ -1,7 +1,11 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import type { ApiResponse } from "../../api/ApiResponse";
 import { baseQueryWithReauth } from "../../api/baseQuery";
-import type { CreateLocalDishPayload, LocalDishType } from "./LocalDishType";
+import type {
+  CreateLocalDishPayload,
+  LocalDishType,
+  PlaceForDishDto,
+} from "./LocalDishType";
 import { PagedResult } from "../../interfaces/PagedResult";
 
 export type RNFile = {
@@ -24,15 +28,17 @@ export const localDishApi = createApi({
         method: "GET",
         params: { page, pageSize, search },
       }),
-      transformResponse: (response: ApiResponse<PagedResult<LocalDishType>>) => {
+      transformResponse: (
+        response: ApiResponse<PagedResult<LocalDishType>>
+      ) => {
         if (!response.isSuccess || !response.result) {
           throw new Error(
             response.errorMessages?.[0] ?? "โหลดสถานที่ไม่สำเร็จ"
           );
         }
         return response.result;
-        },
-        providesTags: ["LocalDish"],
+      },
+      providesTags: ["LocalDish"],
     }),
 
     getById: builder.query<LocalDishType, number>({
@@ -47,7 +53,15 @@ export const localDishApi = createApi({
       },
       providesTags: ["LocalDish"],
     }),
-
+    getPlacesByDishId: builder.query<PlaceForDishDto[], number>({
+      query: (dishId) => `/localDish/${dishId}/places`,
+      transformResponse: (res: ApiResponse<PlaceForDishDto[]>) => {
+        if (!res.isSuccess) {
+          throw new Error(res.errorMessages?.[0] ?? "โหลดรายชื่อร้านไม่สำเร็จ");
+        }
+        return res.result ?? [];
+      },
+    }),
     // ✅ แนะนำให้ create คืน PlaceDto เพื่อเอา placeId ไปอัปโหลดรูป
     createLocalDish: builder.mutation<LocalDishType, CreateLocalDishPayload>({
       query: (body) => ({ url: "/localDish", method: "POST", body }),
@@ -66,7 +80,11 @@ export const localDishApi = createApi({
       void,
       { dishId: number; body: CreateLocalDishPayload }
     >({
-      query: ({ dishId, body }) => ({ url: `/localDish/${dishId}`, method: "PUT", body }),
+      query: ({ dishId, body }) => ({
+        url: `/localDish/${dishId}`,
+        method: "PUT",
+        body,
+      }),
       invalidatesTags: ["LocalDish"],
     }),
 
@@ -98,7 +116,6 @@ export const localDishApi = createApi({
       },
       invalidatesTags: ["LocalDish"],
     }),
-
     // ✅ Delete image
     DeleteLocalDishImage: builder.mutation<
       void,
@@ -116,6 +133,7 @@ export const localDishApi = createApi({
 export const {
   useGetAllLocalDishQuery,
   useGetByIdQuery,
+  useGetPlacesByDishIdQuery,
   useCreateLocalDishMutation,
   useUpdateLocalDishMutation,
   useDeleteLocalDishMutation,

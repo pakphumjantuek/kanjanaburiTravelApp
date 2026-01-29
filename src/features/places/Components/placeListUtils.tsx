@@ -37,11 +37,9 @@ export function buildUniqueTags(places: PlaceDto[]) {
 export function filterPlaces(
   places: PlaceDto[],
   selectedCategory: string | null,
-  selectedTag: string | null
 ) {
   return places.filter((place) => {
     const categoryMatch = !selectedCategory || place.categoryName === selectedCategory;
-    const tagMatch = !selectedTag || (place.tags || []).includes(selectedTag);
-    return categoryMatch && tagMatch;
+    return categoryMatch ;
   });
 }

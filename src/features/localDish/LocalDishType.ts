@@ -27,3 +27,19 @@ export interface LocalDishImageDto {
   imageUrl: string;
   isCover: boolean;
 }
+
+export type PlaceForDishDto = {
+  placeId: number;
+  name: string;
+  address?: string | null;
+  latitude: number;
+  longitude: number;
+
+  price?: number | null;
+  isAvailable: boolean;
+
+  averageRating?: number;
+  reviewCount?: number;
+
+  coverImageUrl?: string | null;
+};
