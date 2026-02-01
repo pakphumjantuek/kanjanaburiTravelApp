@@ -40,15 +40,26 @@ export default function PlaceListAdminScreen() {
   const total = data?.total ?? 0;
 
   const onAdd = () => {
-    navigation.navigate("PlaceFormScreen", { mode: "add" }); 
+    navigation.navigate("PlaceFormScreen", { mode: "add" });
   };
 
   const onEdit = (place: PlaceDto) => {
-    navigation.navigate("PlaceFormScreen", { mode: "edit", place , placeId: place.placeId}); 
+    navigation.navigate("PlaceFormScreen", {
+      mode: "edit",
+      place,
+      placeId: place.placeId,
+    });
   };
 
   const onOpening = (place: PlaceDto) => {
     navigation.navigate("PlaceOpeningScreen", {
+      placeId: place.placeId,
+      placeName: place.name,
+    });
+  };
+
+  const menuPlace = (place: PlaceDto) => {
+    navigation.navigate("PlaceMenuManageScreen", {
       placeId: place.placeId,
       placeName: place.name,
     });
@@ -123,6 +134,7 @@ export default function PlaceListAdminScreen() {
               onEdit={onEdit}
               onDelete={onDelete}
               onOpening={onOpening}
+              menuPlace={menuPlace}
               deleting={isDeleting}
             />
           )}

@@ -24,7 +24,7 @@ export default function UserInterestDetailsScreen() {
   const { data, isLoading, isError, refetch, isFetching } =
     useGetUserInterestDetailsQuery(
       { userId, days: 90, top: 20 },
-      { skip: !Number.isFinite(userId) || userId <= 0 }
+      { skip: !Number.isFinite(userId) || userId <= 0 },
     );
 
   if (!Number.isFinite(userId) || userId <= 0) {
@@ -64,7 +64,18 @@ export default function UserInterestDetailsScreen() {
   const dto = data;
 
   // ----- Charts data prep -----
-  const palette = ["#1E40AF", "#3B82F6", "#60A5FA", "#93C5FD", "#DBEAFE"];
+  const palette = [
+    "#3B82F6", // blue
+    "#EF4444", // red
+    "#10B981", // green
+    "#F59E0B", // yellow
+    "#8B5CF6", // purple
+    "#EC4899", // pink
+    "#6366F1", // indigo
+    "#14B8A6", // teal
+    "#F97316", // orange
+    "#06B6D4", // cyan
+  ];
 
   const pieData =
     dto.topInterests?.slice(0, 5).map((it: any, idx: number) => ({
@@ -74,18 +85,18 @@ export default function UserInterestDetailsScreen() {
     })) ?? [];
 
   const actionBarData =
-    Object.entries(dto.actionCounts ?? {}).map(([k, v]: any) => ({
+    Object.entries(dto.actionCounts ?? {}).map(([k, v]: any, idx) => ({
       value: Number(v ?? 0),
       label: String(k),
-      frontColor: "#1E40AF",
+      frontColor: palette[idx % palette.length],
       topLabelComponent: () => <Text style={styles.barTopLabel}>{v}</Text>,
     })) ?? [];
 
   const placeBarData =
-    (dto.topPlaces ?? []).slice(0, 10).map((p: any) => ({
+    (dto.topPlaces ?? []).slice(0, 10).map((p: any, idx) => ({
       value: Number((p.score ?? 0).toFixed(2)),
       label: p.name ? String(p.name).slice(0, 10) : `#${p.placeId}`,
-      frontColor: "#1E40AF",
+      frontColor: palette[idx % palette.length],
       topLabelComponent: () => (
         <Text style={styles.barTopLabel}>
           {Number((p.score ?? 0).toFixed(2))}
@@ -289,7 +300,7 @@ export default function UserInterestDetailsScreen() {
               <Card title="คะแนนสถานที่">
                 <View style={styles.chartWrap}>
                   <BarChart
-                    data={actionBarData}
+                    data={placeBarData}
                     height={260}
                     barWidth={26}
                     spacing={18}

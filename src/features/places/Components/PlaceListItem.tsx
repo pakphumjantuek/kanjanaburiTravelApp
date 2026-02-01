@@ -8,12 +8,15 @@ export default function PlaceListItem({
   onEdit,
   onDelete,
   onOpening,
+  menuPlace,
   deleting,
 }: {
   item: PlaceDto;
   onEdit: (p: PlaceDto) => void;
   onDelete: (p: PlaceDto) => void;
   onOpening: (p: PlaceDto) => void;
+  menuPlace: (p: PlaceDto) => void;
+
   deleting?: boolean;
 }) {
   const address =
@@ -51,6 +54,12 @@ export default function PlaceListItem({
           style={({ pressed }) => [styles.linkBtn, pressed && styles.pressed]}
         >
           <Text style={styles.linkText}>ตั้งเวลาเปิด-ปิด</Text>
+        </Pressable>
+         <Pressable
+          onPress={() => menuPlace(item)}
+          style={({ pressed }) => [styles.linkBtn, pressed && styles.pressed]}
+        >
+          <Text style={styles.linkText}>จัดการเมนูอาหาร</Text>
         </Pressable>
       </View>
 

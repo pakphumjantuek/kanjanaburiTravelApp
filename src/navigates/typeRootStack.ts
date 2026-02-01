@@ -13,6 +13,7 @@ export type RootStackParamList = {
   PlaceList: undefined;
   PlaceDetails: { placeId: string };
   PlaceFormScreen: { mode: "add" } | { mode: "edit"; placeId: string };
+  PlaceMenuManageScreen: { placeId: string };
 
   //ทริป
   TripListScreen: undefined;

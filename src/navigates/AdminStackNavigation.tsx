@@ -17,6 +17,7 @@ import RecommendAdminScreen from "../features/recommend/screen/RecommendAdminScr
 import PlaceFormScreen from "../features/places/screen/PlaceFormScreen";
 import LocalDishListScreen from "../features/localDish/screen/LocalDishListScreen";
 import LocalDishFormScreen from "../features/localDish/screen/LocalDishFormScreen";
+import PlaceMenuManageScreen from "../features/places/screen/PlaceMenuManageScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -72,6 +73,11 @@ export default function AdminStackNavigation() {
         name="PlaceTagListScreen"
         component={PlaceTagListScreen}
         options={{ title: "จัดการแท็กสถานที่" }}
+      />
+      <Stack.Screen
+        name="PlaceMenuManageScreen"
+        component={PlaceMenuManageScreen}
+        options={{ title: "" }}
       />
       <Stack.Screen
         name="PlaceTagForm"

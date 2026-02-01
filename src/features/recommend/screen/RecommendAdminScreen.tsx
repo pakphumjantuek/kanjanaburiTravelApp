@@ -46,7 +46,7 @@ export default function RecommendAdminScreen() {
       pollingInterval: 3000,
       refetchOnFocus: true,
       refetchOnReconnect: true,
-    }
+    },
   );
 
   const [retrainNow, { isLoading: training }] = useRetrainNowMutation();
@@ -66,7 +66,7 @@ export default function RecommendAdminScreen() {
     } catch (e: any) {
       Alert.alert(
         "ผิดพลาด",
-        e?.data?.errorMessages?.[0] ?? e?.message ?? "เทรนไม่สำเร็จ"
+        e?.data?.errorMessages?.[0] ?? e?.message ?? "เทรนไม่สำเร็จ",
       );
     }
   };
@@ -75,12 +75,16 @@ export default function RecommendAdminScreen() {
   // Chart data prep (Gifted Charts)
   // ----------------------------
   const palette = [
-    "#1E40AF",
-    "#3B82F6",
-    "#10B981",
-    "#F59E0B",
-    "#8B5CF6",
-    "#EC4899",
+    "#3B82F6", // blue
+    "#EF4444", // red
+    "#10B981", // green
+    "#F59E0B", // yellow
+    "#8B5CF6", // purple
+    "#EC4899", // pink
+    "#6366F1", // indigo
+    "#14B8A6", // teal
+    "#F97316", // orange
+    "#06B6D4", // cyan
   ];
 
   const actionsPieData = useMemo(() => {
@@ -111,10 +115,10 @@ export default function RecommendAdminScreen() {
 
     if (guestLogs > 0) users.push({ label: "Guest", value: guestLogs });
 
-    return users.slice(0, 10).map((x) => ({
+    return users.slice(0, 10).map((x, idx) => ({
       value: x.value,
       label: x.label,
-      frontColor: "#1E40AF",
+      frontColor: palette[idx % palette.length],
       topLabelComponent: () => (
         <Text style={styles.barTopLabel}>{String(x.value)}</Text>
       ),
@@ -123,16 +127,16 @@ export default function RecommendAdminScreen() {
 
   const topPlacesBarData = useMemo(() => {
     const list = stats?.topPlaces ?? [];
-    return list.slice(0, 10).map((p: any) => {
+    return list.slice(0, 10).map((p: any, idx) => {
       const v = Number(p?.logs ?? 0);
       const label = (p?.name ? String(p.name) : `#${p?.placeId ?? "-"}`).slice(
         0,
-        10
+        10,
       );
       return {
         value: v,
         label,
-        frontColor: "#10B981",
+        frontColor: palette[idx % palette.length],
         topLabelComponent: () => (
           <Text style={styles.barTopLabel}>{String(v)}</Text>
         ),
@@ -158,31 +162,21 @@ export default function RecommendAdminScreen() {
 
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Pressable
-            style={({ pressed }) => [
+            style={[
               styles.btn,
               styles.btnPrimary,
               training && styles.btnDisabled,
-              pressed && !training && styles.pressed,
             ]}
             disabled={training}
             onPress={onRetrain}
           >
             <Text style={styles.btnTextPrimary}>
-              {training ? "⏳ เทรน..." : "⚡ Retrain"}
+              {training ? "กำลังเทรน..." : "⚡ Retrain"}
             </Text>
           </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.btn,
-              styles.btnGhost,
-              pressed && styles.pressed,
-            ]}
-            onPress={onRefresh}
-          >
-            <Text style={styles.btnTextGhost}>
-              {isFetching ? "..." : "รีเฟรช"}
-            </Text>
+          <Pressable style={[styles.btn, styles.btnGhost]} onPress={onRefresh}>
+            <Text style={styles.btnTextGhost}>รีเฟรช</Text>
           </Pressable>
         </View>
       </View>
@@ -411,7 +405,6 @@ export default function RecommendAdminScreen() {
                         xAxisThickness={0}
                         xAxisLabelTextStyle={styles.xLabel}
                         noOfSections={4}
-                        isAnimated
                       />
                     </ScrollView>
                     <Text style={styles.hint}>
@@ -440,7 +433,6 @@ export default function RecommendAdminScreen() {
                         xAxisThickness={0}
                         xAxisLabelTextStyle={styles.xLabel}
                         noOfSections={4}
-                        isAnimated
                       />
                     </ScrollView>
                     <Text style={styles.hint}>
@@ -527,11 +519,7 @@ function TabButton({
   return (
     <Pressable
       onPress={() => onPress(id)}
-      style={({ pressed }) => [
-        styles.tab,
-        isActive && styles.tabActive,
-        pressed && styles.pressed,
-      ]}
+      style={[styles.tab, isActive && styles.tabActive]}
     >
       <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
         {label}
@@ -759,6 +747,4 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 11,
   },
-
-  pressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
 });

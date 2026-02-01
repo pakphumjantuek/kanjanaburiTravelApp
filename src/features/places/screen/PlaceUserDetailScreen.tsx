@@ -13,16 +13,19 @@ import {
   TouchableOpacity,
   View,
   StatusBar,
+  Platform,
+  Share,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
+import * as Linking from "expo-linking";
+import * as Clipboard from "expo-clipboard";
 
 import { useGetByIdQuery } from "../placeApi";
 import type { PlaceDto } from "../placeTypes";
 
 import { useBehaviorLogger } from "../../behavior/useBehaviorLogger";
-import { getPlaceImageUrl } from "../../places/Components/placeListUtils";
 import AddToTripModalRN from "../Components/AddToTripModalRN";
 
 import {
@@ -33,6 +36,7 @@ import {
 } from "../../placeReview/PlaceReviewApi";
 
 import { formatThaiDate } from "../../../utils/dateUtils";
+import { getCoverUrl } from "../../../utils/imagepath";
 
 const { width } = Dimensions.get("window");
 
@@ -60,7 +64,7 @@ export default function PlaceUserDetailScreen() {
   const params = (route.params ?? {}) as RouteParams;
 
   const { accessToken, hydrated, user } = useSelector(
-    (state: any) => state.auth
+    (state: any) => state.auth,
   );
   const isLoggedIn = !!accessToken && hydrated;
 
@@ -99,17 +103,29 @@ export default function PlaceUserDetailScreen() {
     isLoading: isReviewLoading,
     isFetching: isReviewFetching,
     error: reviewError,
-    refetch: refetchReviews,
   } = useGetReviewsByPlaceQuery(
     { placeId: placeId!, skip, take },
-    { skip: !placeId }
+    { skip: !placeId },
   );
 
-  const avg = useMemo(() => {
+  const avgFromList = useMemo(() => {
     if (!reviews.length) return 0;
     const s = (reviews as any[]).reduce((a, r) => a + (r.rating ?? 0), 0);
     return Math.round((s / reviews.length) * 10) / 10;
   }, [reviews]);
+
+  const ratingText = useMemo(() => {
+    const apiAvg = (displayPlace as any)?.averageRating;
+    if (typeof apiAvg === "number" && apiAvg > 0) return apiAvg.toFixed(1);
+    if (avgFromList > 0) return String(avgFromList.toFixed(1));
+    return "-";
+  }, [displayPlace, avgFromList]);
+
+  const reviewCountText = useMemo(() => {
+    const apiCount = (displayPlace as any)?.reviewCount;
+    if (typeof apiCount === "number") return String(apiCount);
+    return String((reviews as any[])?.length ?? 0);
+  }, [displayPlace, reviews]);
 
   // ---------- Scroll to review form ----------
   const scrollRef = useRef<ScrollView>(null);
@@ -118,6 +134,47 @@ export default function PlaceUserDetailScreen() {
   const scrollToReviewForm = () => {
     scrollRef.current?.scrollTo({ y: reviewFormY.current, animated: true });
   };
+
+  // ---------- Quick actions ----------
+  const addressText = displayPlace?.address ?? "";
+  const placeName = displayPlace?.name ?? "สถานที่ท่องเที่ยว";
+
+  const openMaps = async () => {
+    const query = encodeURIComponent(`${placeName} ${addressText}`.trim());
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${query}`,
+    });
+
+    try {
+      if (url) await Linking.openURL(url);
+    } catch {
+      Alert.alert("เปิดแผนที่ไม่สำเร็จ", "ลองใหม่อีกครั้ง");
+    }
+  };
+
+  const copyAddress = async () => {
+    if (!addressText) return;
+    await Clipboard.setStringAsync(addressText);
+    Alert.alert("คัดลอกแล้ว", "คัดลอกที่อยู่เรียบร้อย");
+  };
+
+  const sharePlace = async () => {
+    const q = encodeURIComponent(`${placeName} ${addressText}`.trim());
+    const link = `https://www.google.com/maps/search/?api=1&query=${q}`;
+
+    try {
+      await Share.share({
+        message: `${placeName}\n${addressText}\n\nแผนที่: ${link}`,
+      });
+    } catch {
+      // ผู้ใช้กดยกเลิกก็ถือว่าไม่เป็นไร
+    }
+  };
+
+  // Read more
+  const [descExpanded, setDescExpanded] = useState(false);
 
   // loading / empty
   if ((isPlaceLoading || !displayPlace) && !placeFromState) {
@@ -148,7 +205,7 @@ export default function PlaceUserDetailScreen() {
   }
 
   const images = displayPlace.images || [];
-  const coverUrl = getPlaceImageUrl(displayPlace);
+  const coverUrl = getCoverUrl(displayPlace);
 
   return (
     <View style={styles.container}>
@@ -181,24 +238,31 @@ export default function PlaceUserDetailScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setIsFavorite(!isFavorite)}
-              style={styles.iconBtnBlur}
-            >
-              <Ionicons
-                name={isFavorite ? "heart" : "heart-outline"}
-                size={24}
-                color={isFavorite ? "#FF5A5F" : "#fff"}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
 
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity onPress={sharePlace} style={styles.iconBtnBlur}>
+                <Ionicons name="share-social-outline" size={22} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setIsFavorite(!isFavorite)}
+                style={styles.iconBtnBlur}
+              >
+                <Ionicons
+                  name={isFavorite ? "heart" : "heart-outline"}
+                  size={24}
+                  color={isFavorite ? "#FF5A5F" : "#fff"}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+        </View>
         {/* Content Sheet */}
         <View style={styles.sheetContainer}>
           <View style={styles.sheetHandle} />
 
-          {/* Title & Badge */}
+          {/* Title */}
           <View style={styles.headerSection}>
             <View style={{ flex: 1, gap: 8 }}>
               {!!displayPlace.categoryName && (
@@ -218,7 +282,7 @@ export default function PlaceUserDetailScreen() {
               >
                 <Ionicons name="star" size={18} color="#FFB02E" />
               </View>
-              <Text style={styles.statValue}>{avg ? String(avg) : "-"}</Text>
+              <Text style={styles.statValue}>{ratingText}</Text>
               <Text style={styles.statLabel}>คะแนน</Text>
             </View>
             <View style={styles.statDivider} />
@@ -232,9 +296,7 @@ export default function PlaceUserDetailScreen() {
                   color="#2196F3"
                 />
               </View>
-              <Text style={styles.statValue}>
-                {(reviews as any[])?.length ?? 0}
-              </Text>
+              <Text style={styles.statValue}>{reviewCountText}</Text>
               <Text style={styles.statLabel}>รีวิว</Text>
             </View>
             <View style={styles.statDivider} />
@@ -251,6 +313,36 @@ export default function PlaceUserDetailScreen() {
             </View>
           </View>
 
+          {/* Quick actions (นำทาง / คัดลอก / แชร์) */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickActionBtn}
+              onPress={openMaps}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="navigate" size={18} color="#fff" />
+              <Text style={styles.quickActionText}>นำทาง</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionBtnGhost}
+              onPress={copyAddress}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="copy-outline" size={18} color="#2A4D50" />
+              <Text style={styles.quickActionTextGhost}>คัดลอก</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionBtnGhost}
+              onPress={sharePlace}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="share-social-outline" size={18} color="#2A4D50" />
+              <Text style={styles.quickActionTextGhost}>แชร์</Text>
+            </TouchableOpacity>
+          </View>
+
           {isLoggedIn && (
             <TouchableOpacity
               onPress={() => setOpenAddTrip(true)}
@@ -263,15 +355,48 @@ export default function PlaceUserDetailScreen() {
 
           <View style={styles.sectionDivider} />
 
-          {/* Description */}
+          {/* Facts Grid (เข้าใจเร็ว) */}
+          <View style={styles.factsGrid}>
+            <View style={styles.factCard}>
+              <Ionicons name="time-outline" size={18} color="#2A4D50" />
+              <Text style={styles.factTitle}>เวลาเที่ยวเฉลี่ย</Text>
+              <Text style={styles.factValue}>
+                {displayPlace.avgVisitMinutes ?? "-"} นาที
+              </Text>
+            </View>
+
+            <View style={styles.factCard}>
+              <Ionicons name="star-outline" size={18} color="#2A4D50" />
+              <Text style={styles.factTitle}>คะแนนเฉลี่ย</Text>
+              <Text style={styles.factValue}>{ratingText}/5</Text>
+            </View>
+          </View>
+
+          {/* Description (อ่านเพิ่ม/ย่อ) */}
           <View style={styles.contentSection}>
-            <Text style={styles.sectionHeader}>เกี่ยวกับสถานที่</Text>
-            <Text style={styles.bodyText}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.sectionHeader}>เกี่ยวกับสถานที่</Text>
+              {!!displayPlace.description?.trim() && (
+                <TouchableOpacity
+                  onPress={() => setDescExpanded((v) => !v)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.readMoreText}>
+                    {descExpanded ? "ย่อ" : "อ่านเพิ่ม"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <Text
+              style={styles.bodyText}
+              numberOfLines={descExpanded ? 999 : 4}
+            >
               {displayPlace.description?.trim() || "ไม่มีรายละเอียด"}
             </Text>
           </View>
 
-          {/* Info Pills */}
+          {/* Info Pills (ยังเก็บไว้ได้ ถ้าคุณยังชอบแนวนี้) */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -306,10 +431,24 @@ export default function PlaceUserDetailScreen() {
                 {displayPlace.address ?? "ไม่มีข้อมูลที่อยู่"}
               </Text>
             </View>
-            <TouchableOpacity style={styles.mapOutlineBtn}>
-              <Text style={styles.mapOutlineBtnText}>ดูบนแผนที่</Text>
-              <Ionicons name="map-outline" size={18} color="#2A4D50" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+              <TouchableOpacity
+                style={[styles.mapOutlineBtn, { flex: 1 }]}
+                onPress={openMaps}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.mapOutlineBtnText}>ดูบนแผนที่</Text>
+                <Ionicons name="map-outline" size={18} color="#2A4D50" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mapOutlineBtn, { width: 120 }]}
+                onPress={copyAddress}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.mapOutlineBtnText}>คัดลอก</Text>
+                <Ionicons name="copy-outline" size={18} color="#2A4D50" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.sectionDivider} />
@@ -318,9 +457,19 @@ export default function PlaceUserDetailScreen() {
           <View style={styles.contentSection}>
             <View style={styles.rowBetween}>
               <Text style={styles.sectionHeader}>รีวิวจากผู้ใช้งาน</Text>
-              <View style={styles.ratingBadge}>
-                <Ionicons name="star" size={12} color="#B45309" />
-                <Text style={styles.ratingBadgeText}>{avg}/5</Text>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <TouchableOpacity
+                  onPress={scrollToReviewForm}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.writeReviewCta}>เขียนรีวิว</Text>
+                </TouchableOpacity>
+                <View style={styles.ratingBadge}>
+                  <Ionicons name="star" size={12} color="#B45309" />
+                  <Text style={styles.ratingBadgeText}>{ratingText}/5</Text>
+                </View>
               </View>
             </View>
 
@@ -352,15 +501,7 @@ export default function PlaceUserDetailScreen() {
                   ยังไม่มีรีวิว เป็นคนแรกเลย!
                 </Text>
                 <TouchableOpacity onPress={scrollToReviewForm}>
-                  <Text
-                    style={{
-                      color: "#2A4D50",
-                      fontWeight: "700",
-                      marginTop: 8,
-                    }}
-                  >
-                    เขียนรีวิว
-                  </Text>
+                  <Text style={styles.writeReviewCta}>เขียนรีวิว</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -370,10 +511,13 @@ export default function PlaceUserDetailScreen() {
                   const reviewUserId = r.userId ?? r.createdByUserId ?? null;
                   const myUserId = user?.userId ?? user?.id ?? null;
                   const isMine = Boolean(
-                    myUserId && reviewUserId && myUserId === reviewUserId
+                    myUserId && reviewUserId && myUserId === reviewUserId,
                   );
+
                   const userName =
-                    (isMine ? user?.DisplayName ?? user?.displayName : null) ||
+                    (isMine
+                      ? (user?.DisplayName ?? user?.displayName)
+                      : null) ||
                     r.displayName ||
                     r.userName ||
                     r.createdByName ||
@@ -488,9 +632,7 @@ export default function PlaceUserDetailScreen() {
           place={displayPlace}
           onCreateTrip={() => {
             setOpenAddTrip(false);
-            navigation.navigate("ทริปของฉัน", {
-              screen: "TripCreateScreen",
-            });
+            navigation.navigate("ทริปของฉัน", { screen: "TripCreateScreen" });
           }}
         />
       </ScrollView>
@@ -518,11 +660,10 @@ function PlaceGalleryRN({
   const getUrl = (img: any) =>
     img?.imageUrl?.startsWith("http")
       ? img.imageUrl
-      : getPlaceImageUrl({ images: [img] } as any);
+      : getCoverUrl({ images: [img] } as any);
 
   return (
     <View style={styles.heroWrap}>
-      {/* HERO IMAGE */}
       <FlatList
         ref={pagerRef}
         data={list}
@@ -543,8 +684,22 @@ function PlaceGalleryRN({
         )}
       />
 
-      {/* GRADIENT */}
       <View style={styles.heroGradient} />
+
+      {/* Dots indicator */}
+      {list.length > 1 && (
+        <View style={styles.dotsRow}>
+          {list.slice(0, 8).map((_, i) => {
+            const active = i === index;
+            return (
+              <View key={i} style={[styles.dot, active && styles.dotActive]} />
+            );
+          })}
+          {list.length > 8 && (
+            <Text style={styles.dotsMore}>+{list.length - 8}</Text>
+          )}
+        </View>
+      )}
 
       {/* IMAGE STACK (preview ว่ามีหลายรูป) */}
       {list.length > 1 && (
@@ -623,11 +778,10 @@ function PlaceReviewFormRN({
   placeId: number;
   isLoggedIn: boolean;
 }) {
-  const {
-    data: myReview,
-    isLoading: isMyLoading,
-    error,
-  } = useGetMyReviewQuery({ placeId }, { skip: !isLoggedIn });
+  const { data: myReview } = useGetMyReviewQuery(
+    { placeId },
+    { skip: !isLoggedIn },
+  );
 
   const [upsert, { isLoading: isSaving }] = useUpsertMyReviewMutation();
   const [del, { isLoading: isDeleting }] = useDeleteMyReviewMutation();
@@ -655,12 +809,11 @@ function PlaceReviewFormRN({
         placeId,
         body: { rating, comment: comment.trim() },
       }).unwrap();
-
       Alert.alert("สำเร็จ", "บันทึกรีวิวสำเร็จ");
     } catch (e: any) {
       Alert.alert(
         "ผิดพลาด",
-        e?.data?.errorMessages?.[0] ?? e?.message ?? "บันทึกรีวิวไม่สำเร็จ"
+        e?.data?.errorMessages?.[0] ?? e?.message ?? "บันทึกรีวิวไม่สำเร็จ",
       );
     }
   };
@@ -682,7 +835,7 @@ function PlaceReviewFormRN({
           } catch (e: any) {
             Alert.alert(
               "ผิดพลาด",
-              e?.data?.errorMessages?.[0] ?? e?.message ?? "ลบรีวิวไม่สำเร็จ"
+              e?.data?.errorMessages?.[0] ?? e?.message ?? "ลบรีวิวไม่สำเร็จ",
             );
           }
         },
@@ -771,54 +924,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
 
-  // Gallery - Compact Height
+  // Gallery
   galleryWrapper: {
-    height: 320 + 88, // เพิ่มพื้นที่ให้แถบ thumbnails
-    width: width,
+    height: 380, // ให้เท่ากับ heroWrap/heroImage
+    width,
     position: "relative",
   },
-  thumbnailImage: { width: "100%", height: "100%" },
-
-  thumbnailsBar: {
-    height: 88,
-    justifyContent: "center",
-    backgroundColor: "#0B1220", // เข้มๆ ให้รูปเด่น (ปรับได้)
-  },
-
-  galleryContainer: { flex: 1, backgroundColor: "#E5E7EB" },
-  mainImageContainer: { width, height: 320, backgroundColor: "#cbd5e1" },
-  mainImage: { width: "100%", height: "100%" },
-  imageGradient: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 160,
-    backgroundColor: "rgba(0,0,0,0.25)",
-  },
-
-  heroWrap: {
-    height: 340,
-    width,
-    backgroundColor: "#E5E7EB",
-  },
-  heroImage: {
-    width,
-    height: 340,
-  },
+  heroWrap: { height: 340, width, backgroundColor: "#E5E7EB" },
+  heroImage: { width, height: 340 },
   heroGradient: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: 140,
+    height: 160,
     backgroundColor: "rgba(0,0,0,0.35)",
+  },
+
+  // Dots
+  dotsRow: {
+    position: "absolute",
+    bottom: 18,
+    left: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  dotActive: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+    width: 18,
+  },
+  dotsMore: {
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "800",
+    fontSize: 12,
+    marginLeft: 6,
   },
 
   /* Image stack */
   imageStack: {
     position: "absolute",
-    bottom: 20,
+    bottom: 18,
     right: 20,
     flexDirection: "row",
     alignItems: "center",
@@ -832,10 +984,7 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     backgroundColor: "#eee",
   },
-  stackImage: {
-    width: "100%",
-    height: "100%",
-  },
+  stackImage: { width: "100%", height: "100%" },
   stackCount: {
     marginLeft: 8,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -843,11 +992,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
   },
-  stackCountText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 13,
-  },
+  stackCountText: { color: "#fff", fontWeight: "800", fontSize: 13 },
 
   // Header Overlay - Modern Glass Effect
   headerOverlay: {
@@ -864,7 +1009,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "rgba(10,10,10,0.25)", // เดิมขาว ทำให้รูปสว่างแล้วอ่านยาก
+    backgroundColor: "rgba(10,10,10,0.25)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -875,14 +1020,13 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  heroChipBtnText: { color: "#fff", fontWeight: "900", fontSize: 12 },
 
-  // Sheet - Enhanced Card Style
+  // Sheet
   sheetContainer: {
     flex: 1,
-    marginTop: -50,
+    marginTop: -38,
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
     paddingHorizontal: 24,
     paddingBottom: 40,
     minHeight: 800,
@@ -902,7 +1046,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  // Header Title - Modern Typography
   headerSection: { marginBottom: 20 },
   categoryLabel: {
     fontSize: 12,
@@ -924,13 +1067,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
 
-  // Stats Row - Card Based Design
+  // Stats Row
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
     paddingVertical: 20,
-    marginBottom: 20,
+    marginBottom: 14,
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
     shadowColor: "#2A4D50",
@@ -959,7 +1102,39 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 13, color: "#64748B", fontWeight: "600" },
   statDivider: { width: 1, height: 36, backgroundColor: "#E2E8F0" },
 
-  // Action Buttons - Modern Gradient Style
+  // Quick actions row
+  quickActionsRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
+  quickActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#2A4D50",
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: "#2A4D50",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  quickActionText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+  quickActionBtnGhost: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#F8FAFC",
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  quickActionTextGhost: { color: "#2A4D50", fontWeight: "900", fontSize: 13 },
+
+  // Action button
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -974,7 +1149,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
-    marginBottom: 28,
+    marginBottom: 18,
   },
   actionBtnText: {
     fontSize: 17,
@@ -983,20 +1158,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Sections - Better Spacing
+  // Sections
   sectionDivider: {
     height: 1,
     backgroundColor: "#E2E8F0",
-    marginVertical: 28,
+    marginVertical: 22,
     marginHorizontal: -24,
   },
-  contentSection: { gap: 16, marginBottom: 8 },
+  contentSection: { gap: 14, marginBottom: 8 },
   sectionHeader: {
     fontSize: 20,
     fontWeight: "900",
     color: "#0F172A",
     letterSpacing: -0.3,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   bodyText: {
     fontSize: 15,
@@ -1004,8 +1179,23 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "400",
   },
+  readMoreText: { color: "#2A4D50", fontWeight: "900", fontSize: 13 },
 
-  // Info Pills - Modern Chips
+  // Facts grid
+  factsGrid: { flexDirection: "row", gap: 12, marginBottom: 18 },
+  factCard: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 6,
+  },
+  factTitle: { fontSize: 12, color: "#64748B", fontWeight: "800" },
+  factValue: { fontSize: 16, color: "#0F172A", fontWeight: "900" },
+
+  // Info Pills
   infoScroll: { flexDirection: "row", marginBottom: 20, marginTop: 8 },
   infoPill: {
     flexDirection: "row",
@@ -1026,7 +1216,7 @@ const styles = StyleSheet.create({
   },
   infoPillText: { fontSize: 14, color: "#334155", fontWeight: "700" },
 
-  // Location - Enhanced Card
+  // Location
   locationBox: {
     flexDirection: "row",
     gap: 14,
@@ -1066,12 +1256,11 @@ const styles = StyleSheet.create({
     borderColor: "#2A4D50",
     borderRadius: 14,
     gap: 10,
-    marginTop: 12,
     backgroundColor: "#F8FAFC",
   },
   mapOutlineBtnText: { fontSize: 15, fontWeight: "800", color: "#2A4D50" },
 
-  // Reviews - Modern Cards
+  // Reviews
   ratingBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1084,6 +1273,8 @@ const styles = StyleSheet.create({
     borderColor: "#FDE68A",
   },
   ratingBadgeText: { fontSize: 14, fontWeight: "900", color: "#92400E" },
+  writeReviewCta: { color: "#2A4D50", fontWeight: "900", fontSize: 14 },
+
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1122,12 +1313,8 @@ const styles = StyleSheet.create({
     maxWidth: 180,
   },
   reviewTime: { fontSize: 13, color: "#94A3B8", fontWeight: "500" },
-  reviewBody: {
-    fontSize: 15,
-    color: "#475569",
-    lineHeight: 24,
-    marginTop: 4,
-  },
+  reviewBody: { fontSize: 15, color: "#475569", lineHeight: 24, marginTop: 4 },
+
   emptyReviewBox: {
     alignItems: "center",
     padding: 40,
@@ -1160,7 +1347,7 @@ const styles = StyleSheet.create({
   pagerBtnDisabled: { opacity: 0.4 },
   pagerText: { fontSize: 14, fontWeight: "800", color: "#2A4D50" },
 
-  // Form - Modern Card Design
+  // Form
   reviewFormCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,

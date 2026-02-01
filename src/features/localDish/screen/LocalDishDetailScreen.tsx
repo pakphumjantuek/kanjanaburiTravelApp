@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
@@ -8,177 +8,142 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  Animated,
   StatusBar,
 } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useGetByIdQuery, useGetPlacesByDishIdQuery } from "../LocalDishApi";
-import { BASE_URL } from "../../../config/env";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { toAbsoluteUrl } from "../../../utils/imagepath";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-const joinUrl = (base: string, path: string) =>
-  `${base.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+const BRAND = {
+  accent: "#FF6B35",
+  bg: "#F6F7F9",
+  surface: "#FFFFFF",
+  text: "#111827",
+  text2: "#374151",
+  muted: "#6B7280",
+  border: "#E5E7EB",
+  soft: "#F3F4F6",
+  chip: "#FFF1EB",
+  successBg: "#ECFDF5",
+  successBorder: "#A7F3D0",
+  successText: "#065F46",
+  warnBg: "#FFFBEB",
+  warnBorder: "#FDE68A",
+  warnText: "#92400E",
+};
 
-function toAbsoluteUrl(path?: string | null) {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  return joinUrl(BASE_URL, path);
-}
 
-function Pill({
+function Chip({
   text,
-  icon,
   variant = "default",
 }: {
   text: string;
-  icon?: string;
   variant?: "default" | "success" | "warning";
 }) {
-  const bgColor =
+  const bg =
     variant === "success"
-      ? "#ECFDF5"
+      ? BRAND.successBg
       : variant === "warning"
-      ? "#FEF3C7"
-      : "#FFF7ED";
-  const borderColor =
+        ? BRAND.warnBg
+        : BRAND.chip;
+
+  const border =
     variant === "success"
-      ? "#6EE7B7"
+      ? BRAND.successBorder
       : variant === "warning"
-      ? "#FCD34D"
-      : "#FDBA74";
-  const textColor =
+        ? BRAND.warnBorder
+        : "#FED7C7";
+
+  const color =
     variant === "success"
-      ? "#065F46"
+      ? BRAND.successText
       : variant === "warning"
-      ? "#92400E"
-      : "#C2410C";
+        ? BRAND.warnText
+        : "#9A3412";
 
   return (
-    <View style={[styles.pill, { backgroundColor: bgColor, borderColor }]}>
-      {icon && <Text style={styles.pillIcon}>{icon}</Text>}
-      <Text style={[styles.pillText, { color: textColor }]}>{text}</Text>
+    <View style={[styles.chip, { backgroundColor: bg, borderColor: border }]}>
+      <Text style={[styles.chipText, { color }]} numberOfLines={1}>
+        {text}
+      </Text>
     </View>
   );
 }
 
-function InfoCard({
-  icon,
-  label,
-  value,
-  color = "#FF6B35",
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  color?: string;
-}) {
+function FieldRow({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.infoCard}>
-      <View style={[styles.infoIconWrap, { backgroundColor: color + "15" }]}>
-        <Text style={styles.infoIcon}>{icon}</Text>
-      </View>
-      <View style={styles.infoTextWrap}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value}</Text>
-      </View>
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={styles.fieldValue} numberOfLines={2}>
+        {value}
+      </Text>
     </View>
   );
 }
 
 function SpicyMeter({ level }: { level: number }) {
   const maxLevel = 5;
-  const animatedValues = useRef(
-    Array.from({ length: maxLevel }, () => new Animated.Value(0))
-  ).current;
-
-  useEffect(() => {
-    const animations = animatedValues.map((anim, idx) =>
-      Animated.timing(anim, {
-        toValue: idx < level ? 1 : 0,
-        duration: 300,
-        delay: idx * 100,
-        useNativeDriver: true,
-      })
-    );
-    Animated.stagger(100, animations).start();
-  }, [level]);
+  const safeLevel = Math.max(0, Math.min(maxLevel, Number(level) || 0));
 
   const getSpicyText = (lvl: number) => {
     if (lvl === 0) return "ไม่เผ็ด";
     if (lvl <= 1) return "เผ็ดน้อย";
-    if (lvl <= 2) return "เผ็ดกลาง";
+    if (lvl <= 2) return "เผ็ดปานกลาง";
     if (lvl <= 3) return "เผ็ดมาก";
-    if (lvl <= 4) return "เผ็ดมากๆ";
-    return "สุดขีด! 🔥";
+    if (lvl <= 4) return "เผ็ดมากเป็นพิเศษ";
+    return "เผ็ดมากที่สุด";
   };
 
   return (
-    <View style={styles.spicyMeter}>
-      <View style={styles.spicyHeader}>
-        <View style={styles.spicyTitleWrap}>
-          <Text style={styles.spicyEmoji}>🌶️</Text>
-          <Text style={styles.spicyLabel}>ระดับความเผ็ด</Text>
-        </View>
-        <View style={styles.spicyBadge}>
-          <Text style={styles.spicyBadgeText}>{getSpicyText(level)}</Text>
-        </View>
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>ระดับความเผ็ด</Text>
+      <Text style={styles.cardSubtitle}>{getSpicyText(safeLevel)}</Text>
+
+      <View style={styles.spicyDots}>
+        {Array.from({ length: maxLevel }).map((_, idx) => {
+          const active = idx < safeLevel;
+          return (
+            <View
+              key={idx}
+              style={[
+                styles.spicyDot,
+                { backgroundColor: active ? BRAND.accent : BRAND.soft },
+              ]}
+            />
+          );
+        })}
       </View>
 
-      <View style={styles.spicyBarContainer}>
-        {animatedValues.map((anim, idx) => (
-          <Animated.View
-            key={idx}
-            style={[
-              styles.spicyBarItem,
-              {
-                backgroundColor:
-                  idx < level
-                    ? idx < 2
-                      ? "#FCD34D"
-                      : idx < 4
-                      ? "#F97316"
-                      : "#DC2626"
-                    : "#E5E7EB",
-                transform: [
-                  {
-                    scale: anim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.8, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <Text style={styles.spicyBarEmoji}>{idx < level ? "🌶️" : "○"}</Text>
-          </Animated.View>
-        ))}
-      </View>
+      <Text style={styles.hintText}>
+        ระดับ {safeLevel}/{maxLevel}
+      </Text>
     </View>
   );
 }
 
 function SectionHeader({
-  icon,
   title,
   subtitle,
 }: {
-  icon: string;
   title: string;
   subtitle?: string;
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <View style={styles.sectionIconWrap}>
-        <Text style={styles.sectionIcon}>{icon}</Text>
-      </View>
-      <View style={styles.sectionTitleWrap}>
+      <View style={styles.sectionBar} />
+      <View style={styles.sectionTextWrap}>
         <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+        {subtitle ? (
+          <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -187,48 +152,46 @@ function SectionHeader({
 export default function LocalDishDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  }, []);
 
   const dishId = Number(route.params?.dishId);
+
   const {
     data: dish,
     isLoading,
-    isFetching,
-    refetch,
+
     error,
   } = useGetByIdQuery(dishId, {
     skip: !Number.isFinite(dishId) || dishId <= 0,
     refetchOnMountOrArgChange: true,
   });
 
-  const { data: places } = useGetPlacesByDishIdQuery(dishId, {
+  const { data: places, refetch } = useGetPlacesByDishIdQuery(dishId, {
     skip: !Number.isFinite(dishId) || dishId <= 0,
   });
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (Number.isFinite(dishId) && dishId > 0) {
+        refetch();
+      }
+    }, [dishId, refetch]),
+  );
 
   if (!Number.isFinite(dishId) || dishId <= 0) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <View style={styles.center}>
-          <View style={styles.errorIconWrap}>
-            <Text style={styles.errorEmoji}>🍽️</Text>
-          </View>
-          <Text style={styles.errorTitle}>ไม่พบข้อมูลอาหาร</Text>
-          <Text style={styles.errorSubtitle}>กรุณาลองใหม่อีกครั้ง</Text>
+        <View style={styles.stateCenter}>
+          <Text style={styles.stateTitle}>ไม่พบข้อมูลรายการอาหาร</Text>
+          <Text style={styles.stateSubtitle}>
+            กรุณาตรวจสอบและลองใหม่อีกครั้ง
+          </Text>
           <TouchableOpacity
-            style={styles.btn}
+            style={styles.primaryBtn}
             onPress={() => navigation.goBack()}
+            activeOpacity={0.9}
           >
-            <Text style={styles.btnText}>← กลับหน้าหลัก</Text>
+            <Text style={styles.primaryBtnText}>กลับ</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -239,12 +202,10 @@ export default function LocalDishDetailScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <View style={styles.center}>
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color="#FF6B35" />
-          </View>
-          <Text style={styles.loadingText}>กำลังโหลดความอร่อย...</Text>
-          <Text style={styles.loadingSubtext}>รอสักครู่นะคะ 🍜</Text>
+        <View style={styles.stateCenter}>
+          <ActivityIndicator size="large" color={BRAND.accent} />
+          <Text style={styles.stateTitle}>กำลังโหลดข้อมูล...</Text>
+          <Text style={styles.stateSubtitle}>โปรดรอสักครู่</Text>
         </View>
       </SafeAreaView>
     );
@@ -254,14 +215,15 @@ export default function LocalDishDetailScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <View style={styles.center}>
-          <View style={styles.errorIconWrap}>
-            <Text style={styles.errorEmoji}>😕</Text>
-          </View>
-          <Text style={styles.errorTitle}>อุ๊ปส์! เกิดข้อผิดพลาด</Text>
-          <Text style={styles.errorSubtitle}>โหลดข้อมูลไม่สำเร็จ</Text>
-          <TouchableOpacity style={styles.btn} onPress={() => refetch()}>
-            <Text style={styles.btnText}>🔄 ลองใหม่อีกครั้ง</Text>
+        <View style={styles.stateCenter}>
+          <Text style={styles.stateTitle}>เกิดข้อผิดพลาด</Text>
+          <Text style={styles.stateSubtitle}>ไม่สามารถโหลดข้อมูลได้</Text>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => refetch()}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.primaryBtnText}>ลองใหม่</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -272,224 +234,201 @@ export default function LocalDishDetailScreen() {
   const cover = images.find((x) => x.isCover) ?? images[0];
   const coverUrl = toAbsoluteUrl(cover?.imageUrl);
 
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 200],
-    outputRange: [0, 1],
-    extrapolate: "clamp",
-  });
+  const availabilityText = dish.isActive
+    ? "พร้อมให้บริการ"
+    : "ไม่พร้อมให้บริการ";
 
   return (
-    <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" />
 
-      {/* Floating Header */}
-      <Animated.View
-        style={[styles.floatingHeader, { opacity: headerOpacity }]}
-      >
+      {/* Header (static / formal) */}
+      <View style={styles.header}>
         <TouchableOpacity
-          style={styles.floatingBackBtn}
+          style={styles.headerBackBtn}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.9}
         >
-          <Text style={styles.floatingBackIcon}>←</Text>
+          <Text style={styles.headerBackIcon}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.floatingTitle} numberOfLines={1}>
-          {dish.nameTH}
-        </Text>
-        <View style={{ width: 44 }} />
-      </Animated.View>
 
-      <Animated.ScrollView
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          รายละเอียดเมนู
+        </Text>
+
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
       >
-        {/* Hero Image with Overlay */}
-        <View style={styles.heroSection}>
+        {/* Cover */}
+        <View style={styles.coverWrap}>
           {coverUrl ? (
             <Image
               source={{ uri: coverUrl }}
-              style={styles.heroCover}
+              style={styles.coverImage}
               resizeMode="cover"
-              onError={() => console.log("Cover load failed:", coverUrl)}
             />
           ) : (
-            <View style={[styles.heroCover, styles.coverFallback]}>
-              <Text style={styles.fallbackIcon}>🍜</Text>
-              <Text style={styles.fallbackText}>ไม่มีรูปภาพ</Text>
+            <View style={[styles.coverImage, styles.coverFallback]}>
+              <Text style={styles.coverFallbackText}>ไม่มีรูปภาพ</Text>
             </View>
           )}
-
-          {/* Gradient Overlay */}
-          <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.3)", "rgba(0,0,0,0.8)"]}
-            style={styles.heroGradient}
-          />
-
-          {/* Back Button */}
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backIcon}>←</Text>
-          </TouchableOpacity>
-
-          {/* Favorite Button */}
-          <TouchableOpacity style={styles.favoriteBtn}>
-            <Text style={styles.favoriteIcon}>♡</Text>
-          </TouchableOpacity>
-
-          {/* Title Overlay */}
-          <Animated.View
-            style={[styles.heroTextOverlay, { opacity: fadeAnim }]}
-          >
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>🍲 อาหารท้องถิ่น</Text>
-            </View>
-            <Text style={styles.heroTitle}>{dish.nameTH}</Text>
-            <Text style={styles.heroSubtitle}>{dish.nameEN}</Text>
-          </Animated.View>
         </View>
 
-        {/* Quick Info Bar */}
-        <View style={styles.quickInfoBar}>
-          <View style={styles.quickInfoItem}>
-            <Text style={styles.quickInfoIcon}>📍</Text>
-            <Text style={styles.quickInfoText}>
-              {dish.origin || "กาญจนบุรี"}
-            </Text>
-          </View>
-          <View style={styles.quickInfoDivider} />
-          <View style={styles.quickInfoItem}>
-            <Text style={styles.quickInfoIcon}>⏱️</Text>
-            <Text style={styles.quickInfoText}>พร้อมเสิร์ฟ</Text>
-          </View>
-          <View style={styles.quickInfoDivider} />
-          <View style={styles.quickInfoItem}>
-            <Text style={styles.quickInfoIcon}>⭐</Text>
-            <Text style={styles.quickInfoText}>แนะนำ</Text>
+        {/* Title */}
+        <View style={styles.titleBlock}>
+          <Text style={styles.dishTitle}>{dish.nameTH}</Text>
+          {dish.nameEN ? (
+            <Text style={styles.dishSubtitle}>{dish.nameEN}</Text>
+          ) : null}
+
+          <View style={styles.chipsRow}>
+            <Chip text={dish.origin || "กาญจนบุรี"} />
+            <Chip
+              text={availabilityText}
+              variant={dish.isActive ? "success" : "warning"}
+            />
+            {dish.isHalal ? <Chip text="ฮาลาล" variant="success" /> : null}
+            {dish.isVegetarian ? (
+              <Chip text="มังสวิรัติ" variant="success" />
+            ) : null}
           </View>
         </View>
 
-        {/* Tags Row */}
-        <Animated.View style={[styles.tagsRow, { opacity: fadeAnim }]}>
-          {dish.isHalal ? (
-            <Pill text="ฮาลาล" icon="☪️" variant="success" />
-          ) : null}
-          {dish.isVegetarian ? (
-            <Pill text="มังสวิรัติ" icon="🥬" variant="success" />
-          ) : null}
-          {dish.origin ? <Pill text={dish.origin} icon="📍" /> : null}
-          {dish.isActive ? (
-            <Pill text="พร้อมบริการ" icon="✅" variant="success" />
-          ) : (
-            <Pill text="ไม่พร้อมบริการ" icon="❌" variant="warning" />
-          )}
-        </Animated.View>
+        {/* Summary */}
+        <View style={styles.card}>
+          <SectionHeader title="ข้อมูลสรุป" subtitle="ข้อมูลหลักของเมนูนี้" />
+          <FieldRow label="ต้นกำเนิด" value={dish.origin || "-"} />
+          <View style={styles.divider} />
+          <FieldRow label="สถานะ" value={availabilityText} />
+        </View>
 
-        {/* Spicy Level */}
+        {/* Spicy */}
         <SpicyMeter level={dish.spicyLevel ?? 0} />
 
-        {/* Description Card */}
+        {/* Description */}
         {dish.description ? (
           <View style={styles.card}>
             <SectionHeader
-              icon="📖"
-              title="เรื่องราวของเมนูนี้"
-              subtitle="ความเป็นมาและเอกลักษณ์"
+              title="รายละเอียด"
+              subtitle="ข้อมูลโดยสรุปของเมนูนี้"
             />
-            <View style={styles.descriptionWrap}>
-              <Text style={styles.descQuote}>"</Text>
-              <Text style={styles.desc}>{dish.description}</Text>
-              <Text style={styles.descQuoteEnd}>"</Text>
-            </View>
+            <Text style={styles.bodyText}>{dish.description}</Text>
           </View>
         ) : null}
 
-        {/* Info Grid */}
-        {dish.origin ? (
-          <View style={styles.infoSection}>
-            <SectionHeader icon="📊" title="ข้อมูลเพิ่มเติม" />
-            <View style={styles.infoGrid}>
-              <InfoCard
-                icon="🗺️"
-                label="ต้นกำเนิด"
-                value={dish.origin}
-                color="#10B981"
-              />
-              <InfoCard
-                icon="🍽️"
-                label="ประเภท"
-                value="อาหารคาว"
-                color="#F59E0B"
-              />
-            </View>
-          </View>
-        ) : null}
-
-        {/* Recommended Places Section */}
+        {/* Places */}
         {places && places.length > 0 ? (
-          <View style={styles.placesSection}>
-            <SectionHeader
-              icon="🏪"
-              title={`ร้านแนะนำ`}
-              subtitle={`${places.length} ร้านที่ต้องลอง!`}
-            />
+          <View style={styles.card}>
+            <View style={styles.placesHeaderRow}>
+              <SectionHeader
+                title="ร้านแนะนำ"
+                subtitle={`${places.length} ร้าน`}
+              />
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() =>
+                  navigation.navigate("LocalDishPlacesList", { dishId })
+                }
+              ></TouchableOpacity>
+            </View>
+
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.placesScroll}
+              contentContainerStyle={styles.placesCarousel}
             >
               {places.map((place: any, idx: number) => {
-                const img =
-                  place.coverImage ||
-                  place.images?.[0]?.imageUrl ||
-                  place.imageUrl;
-                const placeImgUrl = toAbsoluteUrl(img);
+                const cover =
+                  place.images?.find((x: any) => x?.isCover) ??
+                  place.images?.[0];
+
+                const imgPath =
+                  place.coverImageUrl ||
+                  cover?.imageUrl ||
+                  place.imageUrl ||
+                  "";
+
+                const placeImgUrl = toAbsoluteUrl(imgPath);
+
+                const ratingValue =
+                  typeof place?.averageRating === "number"
+                    ? place.averageRating
+                    : null;
+                const ratingText =
+                  ratingValue !== null ? ratingValue.toFixed(1) : "-";
+                const reviewCount =
+                  typeof place?.reviewCount === "number" ? place.reviewCount : null;
+      
                 return (
                   <TouchableOpacity
                     key={idx}
                     style={styles.placeCard}
-                    activeOpacity={0.9}
-                    onPress={() => {
-                      console.log("Go to place", place.id);
-                    }}
+                    activeOpacity={0.92}
+                    onPress={() =>
+                      navigation.navigate("สถานที่", {
+                        screen: "PlaceDetails",
+                        params: { placeId: place.placeId },
+                      })
+                    }
                   >
-                    <View style={styles.placeImageContainer}>
+                    <View style={styles.placeCardImageWrap}>
                       {placeImgUrl ? (
                         <Image
                           source={{ uri: placeImgUrl }}
-                          style={styles.placeImage}
+                          style={styles.placeCardImage}
                           resizeMode="cover"
                         />
                       ) : (
-                        <View style={[styles.placeImage, styles.placeFallback]}>
-                          <Text style={styles.fallbackSmallIcon}>🏠</Text>
-                        </View>
+                        <View
+                          style={[
+                            styles.placeCardImage,
+                            styles.placeCardImageFallback,
+                          ]}
+                        />
                       )}
-                      <LinearGradient
-                        colors={["transparent", "rgba(0,0,0,0.6)"]}
-                        style={styles.placeGradient}
-                      />
-                      <View style={styles.placeBadge}>
-                        <Text style={styles.placeBadgeText}>✨ แนะนำ</Text>
+                      <View style={styles.placeCardBadge}>
+                        <Text style={styles.placeCardBadgeText}>แนะนำ</Text>
                       </View>
                     </View>
 
-                    <View style={styles.placeContent}>
-                      <Text style={styles.placeName} numberOfLines={1}>
+                    <View style={styles.placeCardBody}>
+                      <Text style={styles.placeCardTitle} numberOfLines={1}>
                         {place.name}
                       </Text>
-                      <View style={styles.placeRating}>
-                        <Text style={styles.placeRatingText}>⭐ 4.5</Text>
+
+                      <View style={styles.placeRatingRow}>
+                        <Text style={styles.placeRatingStar}>★</Text>
+                        <Text style={styles.placeRatingText}>{ratingText}</Text>
+                        {reviewCount !== null ? (
+                          <Text style={styles.placeRatingCount}>
+                            ({reviewCount})
+                          </Text>
+                        ) : null}
                       </View>
-                      <TouchableOpacity style={styles.placeButton}>
-                        <Text style={styles.placeButtonText}>ดูรายละเอียด</Text>
-                        <Text style={styles.placeArrowText}>→</Text>
-                      </TouchableOpacity>
+                      
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Text style={styles.placeCardSub} numberOfLines={1}>
+                          {place.address}
+                        </Text>
+                      </View>
+
+                      <View style={styles.placeCardFooter}>
+                        <View style={styles.placeCardPill}>
+                          <Text style={styles.placeCardPillText}>
+                            ดูรายละเอียด
+                          </Text>
+                        </View>
+                        <Text style={styles.placeCardArrow}>→</Text>
+                      </View>
                     </View>
                   </TouchableOpacity>
                 );
@@ -498,783 +437,326 @@ export default function LocalDishDetailScreen() {
           </View>
         ) : null}
 
-        {/* Image Gallery */}
+        {/* Gallery */}
         {images.length > 0 ? (
-          <View style={styles.gallerySection}>
+          <View style={styles.card}>
             <SectionHeader
-              icon="📸"
-              title="แกลเลอรี่"
-              subtitle={`${images.length} รูปภาพ`}
+              title="รูปภาพ"
+              subtitle={`${images.length} รายการ`}
             />
             <View style={styles.gallery}>
-              {images.map((img, idx) => {
+              {images.slice(0, 6).map((img, idx) => {
                 const imgUrl = toAbsoluteUrl(img.imageUrl);
-                const isLarge = idx === 0 || idx === 3;
                 return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.galleryItem,
-                      isLarge && styles.galleryItemLarge,
-                    ]}
-                    activeOpacity={0.9}
-                  >
+                  <View key={idx} style={styles.galleryItem}>
                     {imgUrl ? (
                       <Image
                         source={{ uri: imgUrl }}
                         style={styles.galleryImage}
-                        resizeMode="cover"
                       />
                     ) : (
-                      <View style={[styles.galleryImage, styles.coverFallback]}>
-                        <Text style={styles.fallbackSmallIcon}>🍜</Text>
-                      </View>
+                      <View
+                        style={[styles.galleryImage, styles.coverFallback]}
+                      />
                     )}
-                    <LinearGradient
-                      colors={["transparent", "rgba(0,0,0,0.3)"]}
-                      style={styles.galleryGradient}
-                    />
-                    {img.isCover && (
-                      <View style={styles.coverBadge}>
-                        <Text style={styles.coverBadgeText}>📷 หน้าปก</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
           </View>
         ) : null}
 
-        {/* Call to Action */}
-        <View style={styles.ctaSection}>
-          <LinearGradient
-            colors={["#FF6B35", "#F7931E"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.ctaCard}
-          >
-            <Text style={styles.ctaEmoji}>🍜</Text>
-            <Text style={styles.ctaTitle}>อยากลองชิมไหม?</Text>
-            <Text style={styles.ctaSubtitle}>
-              ค้นหาร้านใกล้คุณที่เสิร์ฟเมนูนี้
-            </Text>
-            <TouchableOpacity style={styles.ctaButton}>
-              <Text style={styles.ctaButtonText}>ค้นหาร้านอาหาร 🔍</Text>
-            </TouchableOpacity>
-          </LinearGradient>
+        {/* CTA */}
+        <View style={styles.card}>
+          <SectionHeader
+            title="ค้นหาร้านอาหาร"
+            subtitle="ค้นหาร้านที่มีเมนูนี้ใกล้คุณ"
+          />
+          <TouchableOpacity style={styles.primaryBtnWide} activeOpacity={0.9}>
+            <Text style={styles.primaryBtnText}>ค้นหาร้านอาหาร</Text>
+          </TouchableOpacity>
+          <Text style={styles.hintText}>
+            * ฟีเจอร์นี้สามารถเชื่อมหน้าแผนที่/รายการร้านได้
+          </Text>
         </View>
 
-        {/* Footer Spacing */}
-        <View style={{ height: 40 }} />
-      </Animated.ScrollView>
-    </View>
+        <View style={{ height: 22 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FFF9F5" },
-  container: { paddingBottom: 20 },
+  safe: { flex: 1, backgroundColor: BRAND.bg },
+  container: { padding: 16, paddingBottom: 22 },
 
-  // Floating Header
-  floatingHeader: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "white",
+  // Header
+  header: {
+    backgroundColor: BRAND.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-
-  floatingBackBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  floatingBackIcon: { fontSize: 20, fontWeight: "900", color: "#111827" },
-
-  floatingTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
-    textAlign: "center",
-    marginHorizontal: 12,
-  },
-
-  // Hero Section
-  heroSection: {
-    position: "relative",
-    width: "100%",
-    height: 420,
-  },
-
-  heroCover: {
-    width: "100%",
-    height: "100%",
-  },
-
-  coverFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF1EB",
-  },
-
-  fallbackIcon: { fontSize: 80, marginBottom: 12 },
-  fallbackText: { fontSize: 16, color: "#C2410C", fontWeight: "700" },
-  fallbackSmallIcon: { fontSize: 32 },
-
-  heroGradient: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "70%",
-  },
-
-  backBtn: {
-    position: "absolute",
-    top: 56,
-    left: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-
-  backIcon: { fontSize: 24, fontWeight: "900", color: "#111827" },
-
-  favoriteBtn: {
-    position: "absolute",
-    top: 56,
-    right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-
-  favoriteIcon: { fontSize: 24, color: "#EF4444" },
-
-  heroTextOverlay: {
-    position: "absolute",
-    bottom: 28,
-    left: 20,
-    right: 20,
-  },
-
-  categoryBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-
-  categoryBadgeText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "white",
-  },
-
-  heroTitle: {
-    fontSize: 36,
-    fontWeight: "900",
-    color: "white",
-    textShadowColor: "rgba(0,0,0,0.3)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
-    letterSpacing: -0.5,
-  },
-
-  heroSubtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.85)",
-    marginTop: 6,
-    fontStyle: "italic",
-  },
-
-  // Quick Info Bar
-  quickInfoBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "white",
-    marginHorizontal: 16,
-    marginTop: -24,
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-
-  quickInfoItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  quickInfoIcon: { fontSize: 18 },
-
-  quickInfoText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#374151",
-  },
-
-  quickInfoDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: "#E5E7EB",
-  },
-
-  // Tags
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+    borderBottomColor: BRAND.border,
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1.5,
-    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 14,
-  },
-
-  pillIcon: { fontSize: 14 },
-
-  pillText: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  // Spicy Meter
-  spicyMeter: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 20,
-    shadowColor: "#FF6B35",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-
-  spicyHeader: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
   },
-
-  spicyTitleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  spicyEmoji: { fontSize: 24 },
-
-  spicyLabel: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  spicyBadge: {
-    backgroundColor: "#FEF2F2",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+  headerBackBtn: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
+    backgroundColor: BRAND.soft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: BRAND.border,
   },
-
-  spicyBadgeText: {
-    fontSize: 13,
+  headerBackIcon: { fontSize: 18, fontWeight: "800", color: BRAND.text },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    color: BRAND.text,
+    fontSize: 16,
     fontWeight: "800",
-    color: "#DC2626",
   },
 
-  spicyBarContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-
-  spicyBarItem: {
-    flex: 1,
-    height: 52,
+  // Cover
+  coverWrap: {
     borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.border,
   },
+  coverImage: { width: "100%", height: 220, backgroundColor: BRAND.soft },
+  coverFallback: { alignItems: "center", justifyContent: "center" },
+  coverFallbackText: { color: BRAND.muted, fontWeight: "700" },
 
-  spicyBarEmoji: {
+  // Title block
+  titleBlock: { marginTop: 12, marginBottom: 6 },
+  dishTitle: {
     fontSize: 22,
-  },
-
-  // Section Header
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-
-  sectionIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#FFF1EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  sectionIcon: { fontSize: 24 },
-
-  sectionTitleWrap: {
-    flex: 1,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
     fontWeight: "900",
-    color: "#111827",
+    color: BRAND.text,
+    letterSpacing: -0.2,
   },
-
-  sectionSubtitle: {
+  dishSubtitle: {
+    marginTop: 4,
     fontSize: 13,
     fontWeight: "600",
-    color: "#9CA3AF",
-    marginTop: 2,
+    color: BRAND.muted,
   },
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipText: { fontSize: 12, fontWeight: "800" },
 
   // Cards
   card: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-
-  descriptionWrap: {
-    backgroundColor: "#FFFBF7",
+    backgroundColor: BRAND.surface,
+    borderWidth: 1,
+    borderColor: BRAND.border,
     borderRadius: 16,
-    padding: 16,
-    position: "relative",
+    padding: 14,
+    marginTop: 12,
   },
 
-  descQuote: {
-    fontSize: 48,
-    color: "#FDBA74",
-    position: "absolute",
-    top: -8,
-    left: 8,
-    fontFamily: "Georgia",
-  },
-
-  descQuoteEnd: {
-    fontSize: 48,
-    color: "#FDBA74",
-    position: "absolute",
-    bottom: -24,
-    right: 8,
-    fontFamily: "Georgia",
-  },
-
-  desc: {
-    color: "#374151",
-    fontSize: 15,
-    fontWeight: "500",
-    lineHeight: 26,
-    paddingLeft: 24,
-  },
-
-  // Info Section
-  infoSection: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-  },
-
-  infoGrid: {
+  sectionHeader: {
     flexDirection: "row",
-    gap: 12,
-  },
-
-  infoCard: {
-    flex: 1,
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: "row",
+    gap: 10,
     alignItems: "center",
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 10,
   },
-
-  infoIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
+  sectionBar: {
+    width: 4,
+    height: 30,
+    backgroundColor: BRAND.accent,
+    borderRadius: 999,
   },
-
-  infoIcon: { fontSize: 24 },
-
-  infoTextWrap: { flex: 1 },
-
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#9CA3AF",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-
-  infoValue: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  // Places Section
-  placesSection: {
-    marginBottom: 20,
-    paddingHorizontal: 16,
-  },
-
-  placesScroll: {
-    paddingRight: 16,
-    gap: 16,
-  },
-
-  placeCard: {
-    width: 200,
-    backgroundColor: "white",
-    borderRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 6,
-    overflow: "hidden",
-  },
-
-  placeImageContainer: {
-    position: "relative",
-    height: 140,
-  },
-
-  placeImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  placeFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-  },
-
-  placeGradient: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "50%",
-  },
-
-  placeBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: "white",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-
-  placeBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#F59E0B",
-  },
-
-  placeContent: {
-    padding: 16,
-    gap: 8,
-  },
-
-  placeName: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#1F2937",
-  },
-
-  placeRating: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  placeRatingText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#6B7280",
-  },
-
-  placeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF1EB",
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 4,
-    gap: 6,
-  },
-
-  placeButtonText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#FF6B35",
-  },
-
-  placeArrowText: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#FF6B35",
-  },
-
-  // Gallery Section
-  gallerySection: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-  },
-
-  gallery: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-
-  galleryItem: {
-    width: (SCREEN_WIDTH - 32 - 12) / 2,
-    height: 140,
-    borderRadius: 20,
-    overflow: "hidden",
-    position: "relative",
-  },
-
-  galleryItemLarge: {
-    width: SCREEN_WIDTH - 32,
-    height: 200,
-  },
-
-  galleryImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  galleryGradient: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: "40%",
-  },
-
-  coverBadge: {
-    position: "absolute",
-    bottom: 12,
-    left: 12,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-
-  coverBadgeText: {
+  sectionTextWrap: { flex: 1 },
+  sectionTitle: { color: BRAND.text, fontSize: 15, fontWeight: "900" },
+  sectionSubtitle: {
+    marginTop: 2,
+    color: BRAND.muted,
     fontSize: 12,
+    fontWeight: "600",
+  },
+
+  divider: { height: 1, backgroundColor: BRAND.border, marginVertical: 10 },
+
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  fieldLabel: { color: BRAND.muted, fontSize: 12, fontWeight: "800" },
+  fieldValue: {
+    flex: 1,
+    textAlign: "right",
+    color: BRAND.text,
+    fontSize: 13,
     fontWeight: "800",
-    color: "#FF6B35",
   },
 
-  // CTA Section
-  ctaSection: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 20,
+  bodyText: {
+    color: BRAND.text2,
+    fontSize: 14,
+    fontWeight: "400",
+    lineHeight: 22,
   },
 
-  ctaCard: {
-    borderRadius: 28,
-    padding: 28,
+  // Spicy
+  cardTitle: { color: BRAND.text, fontSize: 15, fontWeight: "900" },
+  cardSubtitle: {
+    marginTop: 4,
+    color: BRAND.muted,
+    fontSize: 12.5,
+    fontWeight: "700",
+  },
+  spicyDots: { flexDirection: "row", gap: 8, marginTop: 12 },
+  spicyDot: { width: 18, height: 18, borderRadius: 999 },
+  hintText: {
+    marginTop: 10,
+    color: BRAND.muted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  // Places (carousel cards)
+  placesHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  placesMoreText: { color: BRAND.text, fontSize: 12, fontWeight: "300" },
+  placesMoreChevron: {
+    color: BRAND.muted,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: -1,
+  },
+
+  placesCarousel: {
+    paddingTop: 10,
+    paddingBottom: 2,
+    paddingRight: 4,
+    gap: 12,
+  },
+  placeCard: {
+    width: 240,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BRAND.border,
+    backgroundColor: BRAND.surface,
+    overflow: "hidden",
+  },
+  placeCardImageWrap: {
+    height: 130,
+    backgroundColor: BRAND.soft,
+    position: "relative",
+  },
+  placeCardImage: { width: "100%", height: "100%" },
+  placeCardImageFallback: { backgroundColor: BRAND.soft },
+
+  placeCardBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderWidth: 1,
+    borderColor: BRAND.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  placeCardBadgeText: { color: BRAND.accent, fontSize: 12, fontWeight: "900" },
+
+  placeCardBody: { padding: 12, gap: 6 },
+  placeCardTitle: { color: BRAND.text, fontSize: 14.5, fontWeight: "900" },
+  placeRatingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  placeRatingStar: { color: "#F59E0B", fontSize: 13, fontWeight: "900" },
+  placeRatingText: { color: BRAND.text2, fontSize: 12.5, fontWeight: "900" },
+  placeRatingCount: { color: BRAND.muted, fontSize: 12, fontWeight: "700" },
+  placeCardSub: { color: BRAND.muted, fontSize: 12.5, fontWeight: "700" },
+  priceInline: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2E7D32", // เขียว ดูเป็นมิตร/ราคาโอเค
+    marginLeft: 8,
+  },
+  placeCardFooter: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  placeCardPill: {
+    backgroundColor: BRAND.chip,
+    borderWidth: 1,
+    borderColor: "#FED7C7",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  placeCardPillText: { color: "#9A3412", fontSize: 12.5, fontWeight: "900" },
+  placeCardArrow: { color: BRAND.accent, fontSize: 18, fontWeight: "900" },
+
+  // Gallery (simple grid)
+  gallery: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  galleryItem: {
+    width: (SCREEN_WIDTH - 32 - 10) / 2,
+    height: 120,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: BRAND.border,
+    backgroundColor: BRAND.soft,
+  },
+  galleryImage: { width: "100%", height: "100%" },
+
+  // Buttons / states
+  primaryBtn: {
+    marginTop: 10,
+    backgroundColor: BRAND.accent,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  primaryBtnWide: {
+    marginTop: 6,
+    backgroundColor: BRAND.accent,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: "center",
   },
+  primaryBtnText: { color: "white", fontWeight: "900", fontSize: 14 },
 
-  ctaEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-
-  ctaTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "white",
-    marginBottom: 6,
-  },
-
-  ctaSubtitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.85)",
-    marginBottom: 20,
-  },
-
-  ctaButton: {
-    backgroundColor: "white",
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-
-  ctaButtonText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FF6B35",
-  },
-
-  // States
-  center: {
+  stateCenter: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-    padding: 32,
+    gap: 8,
+    padding: 28,
   },
-
-  loadingWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FFF1EB",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-
-  loadingText: {
-    color: "#FF6B35",
-    fontWeight: "800",
-    fontSize: 18,
-  },
-
-  loadingSubtext: {
-    color: "#9CA3AF",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-
-  errorIconWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#FFF1EB",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-
-  errorEmoji: { fontSize: 48 },
-
-  errorTitle: {
-    color: "#111827",
+  stateTitle: {
+    color: BRAND.text,
     fontWeight: "900",
-    fontSize: 20,
+    fontSize: 16,
     textAlign: "center",
   },
-
-  errorSubtitle: {
-    color: "#6B7280",
+  stateSubtitle: {
+    color: BRAND.muted,
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: 13,
     textAlign: "center",
-  },
-
-  btn: {
-    backgroundColor: "#FF6B35",
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    borderRadius: 18,
-    shadowColor: "#FF6B35",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-    marginTop: 8,
-  },
-
-  btnText: {
-    color: "white",
-    fontWeight: "900",
-    fontSize: 15,
   },
 });

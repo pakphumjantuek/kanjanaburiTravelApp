@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -6,834 +6,659 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   Dimensions,
+  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useSelector } from "react-redux";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { useGetHomeQuery } from "../features/home/homeApi";
-import { COLORS, FONTS, SIZES, SHADOWS } from "../common";
-import { BASE_URL } from "../config/env";
+import { COLORS, FONTS, SHADOWS } from "../common";
+import { toAbsoluteUrl } from "../utils/imagepath";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
+const CARD_WIDTH = width * 0.72;
 
-type Category = {
+type QuickAction = {
   key: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bgColor: string;
 };
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-
   const { accessToken, hydrated } = useSelector((state: any) => state.auth);
-
   const isLoggedIn = hydrated && !!accessToken;
-
-  const [query, setQuery] = useState("");
 
   const { data, isLoading, isFetching } = useGetHomeQuery(
     { topN: 10, personalized: isLoggedIn ? 1 : 0 } as any,
-    {
-      refetchOnFocus: true,
-      refetchOnReconnect: true,
-    }
+    { refetchOnFocus: true, refetchOnReconnect: true }
   );
 
   const sections = data?.sections ?? [];
 
-  const categories = useMemo<Category[]>(
+  const quickActions = useMemo<QuickAction[]>(
     () => [
-      { key: "recommended", label: "ท่องเที่ยว", icon: "map" },
-      { key: "nature", label: "ธรรมชาติ", icon: "leaf" },
-      { key: "history", label: "ประวัติศาสตร์", icon: "business" },
-      { key: "activity", label: "กิจกรรม", icon: "trail-sign" },
-      { key: "stay", label: "ที่พัก", icon: "bed" },
-      { key: "food", label: "ร้านอาหาร", icon: "restaurant" },
+      { key: "places", label: "สถานที่", icon: "location", color: "#059669", bgColor: "#D1FAE5" },
+      { key: "trips", label: "วางแผน", icon: "map", color: "#7C3AED", bgColor: "#EDE9FE" },
+      { key: "food", label: "อาหาร", icon: "restaurant", color: "#EA580C", bgColor: "#FFEDD5" },
+      { key: "stay", label: "ที่พัก", icon: "bed", color: "#0284C7", bgColor: "#E0F2FE" },
     ],
     []
   );
 
-  const onSearch = () => {
-    const q = query.trim();
-    navigation.navigate("PlacesScreen", q ? { search: q } : undefined);
-  };
+  const toPlaces = () => navigation.navigate("สถานที่");
 
-  const toPlaces = () => {
-    navigation.navigate("สถานที่", { screen: "PlaceDetails" });
-  };
+ 
 
-  const getImageUrl = (path?: string | null) => {
-    if (!path) return "";
-    if (path.startsWith("http")) return path;
-    return `${BASE_URL}${path}`;
-  };
-
-  // ✅ helper: ตั้งชื่อ section ให้ “แนะนำสำหรับคุณ” เมื่อ login
-  const getSectionTitle = (sec: any, sectionIndex: number) => {
-    // ถ้า API มี key ชัดเจน ใช้ key จะดีที่สุด
+  const getSectionTitle = (sec: any, idx: number) => {
     const key = String(sec?.key ?? "").toLowerCase();
-
-    // กลุ่มที่ถือว่า "personalized"
-    const isPersonal =
-      key === "for_you" ||
-      key === "foryou" ||
-      key === "personalized" ||
-      key === "recommended";
-
-    if (isLoggedIn && isPersonal) return "แนะนำสำหรับคุณ";
-    if (!isLoggedIn && isPersonal) return sec?.title ?? "แนะนำยอดนิยม";
-
-    // อื่น ๆ ใช้ title จาก API
-    return sec?.title ?? (sectionIndex === 0 ? "แนะนำ" : "รายการแนะนำ");
+    const isPersonal = ["for_you", "foryou", "personalized", "recommended"].includes(key);
+    if (isLoggedIn && isPersonal) return "แนะนำสำหรับคุณ ✨";
+    if (!isLoggedIn && isPersonal) return sec?.title ?? "ยอดนิยม 🔥";
+    return sec?.title ?? (idx === 0 ? "แนะนำ" : "รายการแนะนำ");
   };
 
-  const getSectionSubtitle = (sec: any) => {
-    const key = String(sec?.key ?? "").toLowerCase();
-    const isPersonal =
-      key === "for_you" ||
-      key === "foryou" ||
-      key === "personalized" ||
-      key === "recommended";
-
-    if (isLoggedIn && isPersonal) return "คัดมาให้จากความสนใจของคุณ";
-    return "แนะนำจากระบบ";
+  const handleQuickAction = (key: string) => {
+    switch (key) {
+      case "places": navigation.navigate("สถานที่"); break;
+      case "trips": navigation.navigate("ทริปของฉัน"); break;
+      case "food": navigation.navigate("อาหาร"); break;
+      case "stay": navigation.navigate("PlacesScreen", { category: "stay" }); break;
+    }
   };
 
   if (isLoading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
+        <View style={styles.loadingIcon}>
+          <Ionicons name="compass" size={48} color={COLORS.primary} />
+        </View>
+        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 16 }} />
+        <Text style={styles.loadingText}>กำลังค้นหาสถานที่น่าสนใจ...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.page} showsVerticalScrollIndicator={false}>
-      {/* ================= HERO SECTION ================= */}
-      <ImageBackground
-        source={{
-          uri: "https://images.unsplash.com/photo-1552733407-5d5c46c3bb3b?w=800",
-        }}
-        style={styles.hero}
-        resizeMode="cover"
-      >
-        <View style={styles.heroOverlay} />
-        <View style={styles.heroContent}>
-          <Text style={styles.heroWelcome}>
-            {isLoggedIn ? "สวัสดี 👋" : "ยินดีต้อนรับสู่"}
-          </Text>
-          <Text style={styles.heroTitle}>กาญจนบุรี</Text>
-          <Text style={styles.heroSubtitle}>
-            สัมผัสความงามของธรรมชาติและประวัติศาสตร์
-          </Text>
-          <Text style={styles.heroDesc}>
-            ค้นพบสถานที่ท่องเที่ยว ที่พัก และร้านอาหารยอดนิยมในกาญจนบุรี
-          </Text>
-
-          {/* Search Bar */}
-          <View style={styles.searchCard}>
-            <Ionicons name="search" size={20} color={COLORS.gray} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="ค้นหาสถานที่ท่องเที่ยว..."
-              placeholderTextColor={COLORS.gray2}
-              value={query}
-              onChangeText={setQuery}
-              returnKeyType="search"
-              onSubmitEditing={onSearch}
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery("")}>
-                <Ionicons name="close-circle" size={20} color={COLORS.gray2} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.searchBtn} onPress={onSearch}>
-              <Text style={styles.searchBtnText}>ค้นหา</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Quick Actions */}
-          <View style={styles.ctaRow}>
-            <TouchableOpacity style={styles.ctaPrimary} onPress={toPlaces}>
-              <Ionicons name="compass" size={20} color={COLORS.white} />
-              <Text style={styles.ctaPrimaryText}>สำรวจ</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.ctaOutline}
-              onPress={() => navigation.navigate("TripScreen")}
+    <View style={styles.page}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <ScrollView showsVerticalScrollIndicator={false} bounces={true}>
+        
+        {/* ================= HERO SECTION ================= */}
+        <View style={styles.heroContainer}>
+          <ImageBackground
+            source={{ uri: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200" }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          >
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
+              locations={[0, 0.5, 1]}
+              style={styles.heroGradient}
             >
-              <Ionicons name="map-outline" size={20} color={COLORS.white} />
-              <Text style={styles.ctaOutlineText}>วางแผน</Text>
-            </TouchableOpacity>
+              <View style={styles.heroContent}>
+                <View style={styles.heroTag}>
+                  <Ionicons name="sparkles" size={14} color="#FFD700" />
+                  <Text style={styles.heroTagText}>สถานที่ท่องเที่ยวในจังหวัดกาญจนบุรี</Text>
+                </View>
+                
+                <Text style={styles.heroTitle}>กาญจนบุรี</Text>
+                <Text style={styles.heroSubtitle}>
+                  ดินแดนแห่งขุนเขา สายน้ำ และประวัติศาสตร์
+                </Text>
+
+                <View style={styles.heroStats}>
+                  <View style={styles.statItem}>
+                    <Ionicons name="location" size={16} color="#10B981" />
+                    <Text style={styles.statText}>100+ สถานที่</Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Ionicons name="star" size={16} color="#FBBF24" />
+                    <Text style={styles.statText}>4.8 คะแนน</Text>
+                  </View>
+                </View>
+              </View>
+            </LinearGradient>
+          </ImageBackground>
+        </View>
+
+        {/* ================= QUICK ACTIONS ================= */}
+        <View style={styles.quickActionsWrapper}>
+          <View style={styles.quickActionsContainer}>
+            {quickActions.map((action) => (
+              <TouchableOpacity
+                key={action.key}
+                style={styles.quickActionItem}
+                onPress={() => handleQuickAction(action.key)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.quickActionIcon, { backgroundColor: action.bgColor }]}>
+                  <Ionicons name={action.icon} size={24} color={action.color} />
+                </View>
+                <Text style={styles.quickActionLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
-      </ImageBackground>
 
-      {/* ================= CATEGORY PILLS ================= */}
-      <View style={styles.categoryContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat.key}
-              style={styles.categoryPill}
-              onPress={() =>
-                navigation.navigate("PlacesScreen", { category: cat.key })
-              }
-            >
-              <View style={styles.categoryIconBg}>
-                <Ionicons name={cat.icon} size={18} color={COLORS.primary} />
+      
+
+        {/* ================= CONTENT SECTIONS ================= */}
+        <View style={styles.contentContainer}>
+          {sections.map((sec: any, sectionIndex: number) => (
+            <View key={sec.key ?? sectionIndex} style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleWrap}>
+                  <Text style={styles.sectionTitle}>{getSectionTitle(sec, sectionIndex)}</Text>
+                  <View style={styles.sectionLine} />
+                </View>
+                <TouchableOpacity style={styles.seeAllBtn} onPress={toPlaces}>
+                  <Text style={styles.seeAllText}>ดูทั้งหมด</Text>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+                </TouchableOpacity>
               </View>
-              <Text style={styles.categoryText}>{cat.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+              
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={styles.cardsScroll}
+                decelerationRate="fast"
+                snapToInterval={CARD_WIDTH + 16}
+              >
+                {sec.items?.map((p: any, idx: number) => {
+                  const imageUrl = p.coverImageUrl
+                    ? toAbsoluteUrl(p.coverImageUrl)
+                    : "https://via.placeholder.com/400x300?text=No+Image";
 
-      {/* ================= SECTIONS ================= */}
-      <View style={styles.container}>
+                  return (
+                    <TouchableOpacity
+                      key={p.placeId}
+                      activeOpacity={0.9}
+                      style={[styles.card, idx === 0 && { marginLeft: 0 }]}
+                      onPress={() =>
+                        navigation.navigate("สถานที่", {
+                          screen: "PlaceDetails",
+                          params: { placeId: p.placeId },
+                        })
+                      }
+                    >
+                      <View style={styles.cardImageContainer}>
+                        <Image source={{ uri: imageUrl }} style={styles.cardImage} />
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.7)']}
+                          style={styles.cardGradient}
+                        />
+                        
+                        {/* Rating Badge */}
+                        <View style={styles.cardRating}>
+                          <Ionicons name="star" size={12} color="#FFD700" />
+                          <Text style={styles.cardRatingText}>
+                            {p.rating ? p.rating.toFixed(1) : "N/A"}
+                          </Text>
+                        </View>
+
+                        {/* Category Tag */}
+                        {p.categoryName && (
+                          <View style={styles.cardCategory}>
+                            <Text style={styles.cardCategoryText}>{p.categoryName}</Text>
+                          </View>
+                        )}
+
+                        {/* Favorite Button */}
+                        <TouchableOpacity style={styles.favoriteBtn}>
+                          <Ionicons name="heart-outline" size={20} color="#FFF" />
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.cardDetails}>
+                        <Text style={styles.cardTitle} numberOfLines={1}>{p.name}</Text>
+                        <View style={styles.cardLocation}>
+                          <Ionicons name="location" size={14} color="#10B981" />
+                          <Text style={styles.cardLocationText} numberOfLines={1}>
+                            {p.locationName ?? p.district ?? "กาญจนบุรี"}
+                          </Text>
+                        </View>
+                        {p.description && (
+                          <Text style={styles.cardDesc} numberOfLines={2}>
+                            {p.description}
+                          </Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ))}
+        </View>
+
+        {/* ================= EXPLORE MORE CTA ================= */}
+        <View style={styles.exploreCta}>
+          <LinearGradient
+            colors={['#059669', '#047857']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.exploreGradient}
+          >
+            <Ionicons name="compass" size={48} color="rgba(255,255,255,0.2)" style={styles.exploreIcon} />
+            <Text style={styles.exploreTitle}>พร้อมออกเดินทางหรือยัง?</Text>
+            <Text style={styles.exploreDesc}>ค้นพบสถานที่ท่องเที่ยวอีกมากมายในกาญจนบุรี</Text>
+            <TouchableOpacity style={styles.exploreBtn} onPress={toPlaces}>
+              <Text style={styles.exploreBtnText}>สำรวจเพิ่มเติม</Text>
+              <Ionicons name="arrow-forward" size={18} color="#059669" />
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+
         {isFetching && (
-          <View style={styles.fetchingIndicator}>
+          <View style={styles.loadingFooter}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.fetchingText}>กำลังอัพเดท...</Text>
           </View>
         )}
 
-        {sections.map((sec: any, sectionIndex: number) => (
-          <View key={sec.key ?? sectionIndex} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderLeft}>
-                <View style={styles.sectionIconContainer}>
-                  <Ionicons
-                    name={
-                      sectionIndex === 0
-                        ? "star"
-                        : sectionIndex === 1
-                        ? "flame"
-                        : "heart"
-                    }
-                    size={20}
-                    color={COLORS.primary}
-                  />
-                </View>
-                <View>
-                  <Text style={styles.sectionTitle}>
-                    {getSectionTitle(sec, sectionIndex)}
-                  </Text>
-                  <Text style={styles.sectionSub}>
-                    {getSectionSubtitle(sec)}
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity style={styles.moreButton} onPress={toPlaces}>
-                <Text style={styles.moreLink}>ดูทั้งหมด</Text>
-                <Ionicons name="chevron-forward" size={16} color="#15803d" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cardsScroll}
-            >
-              {sec.items?.map((p: any) => {
-                const imageUrl = p.coverImageUrl
-                  ? getImageUrl(p.coverImageUrl)
-                  : "https://via.placeholder.com/400x300?text=No+Image";
-                  
-
-                return (
-                  <TouchableOpacity
-                    key={p.placeId}
-                    activeOpacity={0.9}
-                    onPress={() =>
-                      navigation.navigate("สถานที่", {
-                        screen: "PlaceDetails",
-                        params: {
-                        placeId: p.placeId
-                        },
-                      })
-                    }
-                    style={styles.card}
-                  >
-                    <View style={styles.cardImageWrap}>
-                      <Image
-                        source={{ uri: imageUrl }}
-                        style={styles.cardImage}
-                      />
-                      <View style={styles.cardImageOverlay} />
-
-                      {!!p.categoryName && (
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>{p.categoryName}</Text>
-                        </View>
-                      )}
-
-                      {typeof p.rating === "number" && (
-                        <View style={styles.rating}>
-                          <Ionicons name="star" size={12} color="#FFD700" />
-                          <Text style={styles.ratingText}>
-                            {p.rating.toFixed(1)}
-                          </Text>
-                        </View>
-                      )}
-
-                      <View style={styles.favoriteBtn}>
-                        <Ionicons
-                          name="heart-outline"
-                          size={20}
-                          color={COLORS.white}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.cardBody}>
-                      <Text style={styles.cardTitle} numberOfLines={2}>
-                        {p.name}
-                      </Text>
-
-                      {(p.locationName || p.district) && (
-                        <View style={styles.locationRow}>
-                          <Ionicons
-                            name="location-sharp"
-                            size={14}
-                            color="#15803d"
-                          />
-                          <Text style={styles.locationText} numberOfLines={1}>
-                            {p.locationName ?? p.district}
-                          </Text>
-                        </View>
-                      )}
-
-                      <Text style={styles.cardDesc} numberOfLines={2}>
-                        {p.description}
-                      </Text>
-
-                      {Array.isArray(p.tags) && p.tags.length > 0 && (
-                        <View style={styles.tagRow}>
-                          {p.tags.slice(0, 3).map((t: string, idx: number) => (
-                            <View
-                              key={`${p.placeId}-${idx}`}
-                              style={styles.tag}
-                            >
-                              <Text style={styles.tagText}>#{t}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      <TouchableOpacity
-                        style={styles.detailBtn}
-                        onPress={() =>
-                          navigation.navigate("สถานที่", {
-                            screen: "PlaceDetails",
-                            params: { placeId: p.placeId },
-                          })
-                        }
-                      >
-                        <Text style={styles.detailBtnText}>ดูรายละเอียด</Text>
-                        <Ionicons
-                          name="arrow-forward"
-                          size={14}
-                          color={COLORS.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        ))}
-
-        {/* ================= FEATURES SECTION ================= */}
-        <View style={styles.featuresSection}>
-          <Text style={styles.featuresTitle}>ทำไมต้องเลือกเราในการวางแผน?</Text>
-          <View style={styles.featuresGrid}>
-            <View style={styles.featureCard}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="shield-checkmark" size={28} color="#15803d" />
-              </View>
-              <Text style={styles.featureTitle}>น่าเชื่อถือ</Text>
-              <Text style={styles.featureDesc}>
-                ข้อมูลที่ถูกต้องและอัพเดทล่าสุด
-              </Text>
-            </View>
-
-            <View style={styles.featureCard}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="star" size={28} color="#15803d" />
-              </View>
-              <Text style={styles.featureTitle}>คุณภาพ</Text>
-              <Text style={styles.featureDesc}>รีวิวจากนักท่องเที่ยวจริง</Text>
-            </View>
-
-            <View style={styles.featureCard}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="compass" size={28} color="#15803d" />
-              </View>
-              <Text style={styles.featureTitle}>ครบครัน</Text>
-              <Text style={styles.featureDesc}>สถานที่ท่องเที่ยวมากมาย</Text>
-            </View>
-
-            <View style={styles.featureCard}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="phone-portrait" size={28} color="#15803d" />
-              </View>
-              <Text style={styles.featureTitle}>ใช้งานง่าย</Text>
-              <Text style={styles.featureDesc}>ออกแบบเพื่อความสะดวก</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ================= BOTTOM CTA ================= */}
-        <View style={styles.bottomCta}>
-          <View style={styles.bottomCtaIcon}>
-            <Ionicons name="rocket" size={32} color="#15803d" />
-          </View>
-          <Text style={styles.bottomTitle}>พร้อมออกเดินทางหรือยัง?</Text>
-          <Text style={styles.bottomDesc}>
-            วางแผนทริปและรับคำแนะนำสถานที่ที่เหมาะกับคุณในกาญจนบุรี
-            เริ่มต้นการผจญภัยของคุณวันนี้
-          </Text>
-
-          <TouchableOpacity
-            style={styles.bottomBtn}
-            onPress={() => navigation.navigate("TripScreen")}
-          >
-            <Ionicons name="map" size={18} color={COLORS.white} />
-            <Text style={styles.bottomBtnText}>วางแผนเที่ยวเลย</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.bottomPadding} />
-    </ScrollView>
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: COLORS.offwhite },
-
+  page: { 
+    flex: 1, 
+    backgroundColor: '#F8FAFC' 
+  },
   loading: {
     flex: 1,
-    backgroundColor: COLORS.offwhite,
+    backgroundColor: '#F8FAFC',
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+  },
+  loadingIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#E0F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingText: {
     fontFamily: FONTS.medium,
     color: COLORS.gray,
     fontSize: 16,
+    marginTop: 16,
   },
-
-  hero: { height: 480, justifyContent: "flex-end" },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(26, 77, 46, 0.75)",
+  
+  // Hero
+  heroContainer: {
+    height: height * 0.42,
+    width: '100%',
   },
-  heroContent: {
-    paddingHorizontal: SIZES.large,
-    paddingBottom: SIZES.xLarge + 10,
+  heroImage: {
+    width: '100%',
+    height: '100%',
   },
-  heroWelcome: {
-    color: "rgba(255,255,255,0.85)",
-    fontFamily: FONTS.medium,
-    fontSize: 14,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  heroTitle: {
-    color: COLORS.white,
-    fontFamily: FONTS.extraBold,
-    fontSize: 48,
-    marginTop: 4,
-    letterSpacing: -1,
-  },
-  heroSubtitle: {
-    color: "rgba(255,255,255,0.95)",
-    fontFamily: FONTS.semiBold,
-    fontSize: 18,
-    marginTop: 8,
-    lineHeight: 26,
-  },
-  heroDesc: {
-    color: "rgba(255,255,255,0.8)",
-    fontFamily: FONTS.regular,
-    fontSize: 14,
-    marginTop: 8,
-    lineHeight: 22,
-  },
-
-  searchCard: {
-    marginTop: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    ...SHADOWS.medium,
-  },
-  searchInput: {
+  heroGradient: {
     flex: 1,
-    fontFamily: FONTS.regular,
-    fontSize: 15,
-    color: COLORS.primary2,
+    justifyContent: 'flex-end',
+    padding: 24,
+    paddingBottom: 32,
   },
-  searchBtn: {
-    backgroundColor: "#15803d",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  searchBtnText: {
-    color: COLORS.white,
-    fontFamily: FONTS.semiBold,
-    fontSize: 14,
-  },
-
-  ctaRow: { flexDirection: "row", gap: 12, marginTop: 16 },
-  ctaPrimary: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#15803d",
-    paddingVertical: 14,
-    borderRadius: 14,
-    ...SHADOWS.small,
-  },
-  ctaPrimaryText: {
-    color: COLORS.white,
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-  },
-  ctaOutline: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.4)",
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  ctaOutlineText: {
-    color: COLORS.white,
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-  },
-
-  categoryContainer: {
-    backgroundColor: COLORS.white,
-    paddingVertical: SIZES.medium,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  categoryScroll: { paddingHorizontal: SIZES.large, gap: 10 },
-  categoryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: COLORS.white,
-    borderWidth: 1.5,
-    borderColor: "#e5e7eb",
-  },
-  categoryIconBg: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#f0fdf4",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  categoryText: {
-    color: COLORS.primary2,
-    fontFamily: FONTS.medium,
-    fontSize: 14,
-  },
-
-  container: { paddingTop: SIZES.large },
-
-  fetchingIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-  },
-  fetchingText: {
-    fontFamily: FONTS.regular,
-    color: COLORS.gray,
-    fontSize: 13,
-  },
-
-  section: { marginBottom: SIZES.xLarge },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: SIZES.large,
-    marginBottom: SIZES.medium,
-  },
-  sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  sectionIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#f0fdf4",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sectionTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 20,
-    color: COLORS.primary2,
-    letterSpacing: -0.5,
-  },
-  sectionSub: {
-    fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.gray,
-    marginTop: 2,
-  },
-  moreButton: { flexDirection: "row", alignItems: "center", gap: 4 },
-  moreLink: { fontFamily: FONTS.semiBold, color: "#15803d", fontSize: 14 },
-
-  cardsScroll: {
-    paddingHorizontal: SIZES.large,
-    gap: 16,
-    paddingVertical: 4,
-  },
-  card: {
-    width: 280,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    overflow: "hidden",
-    ...SHADOWS.medium,
-  },
-  cardImageWrap: {
-    height: 180,
-    backgroundColor: "#e5e7eb",
-    position: "relative",
-  },
-  cardImage: { width: "100%", height: "100%" },
-  cardImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.1)",
-  },
-
-  badge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
+  heroContent: {},
+  heroTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    ...SHADOWS.small,
-  },
-  badgeText: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 11,
-    color: COLORS.primary2,
-  },
-
-  rating: {
-    position: "absolute",
-    bottom: 12,
-    left: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0,0,0,0.7)",
     borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    marginBottom: 12,
+    gap: 6,
   },
-  ratingText: { color: COLORS.white, fontFamily: FONTS.semiBold, fontSize: 12 },
-
-  favoriteBtn: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
+  heroTagText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontFamily: FONTS.semiBold,
+    letterSpacing: 0.5,
   },
-
-  cardBody: { padding: 16 },
-  cardTitle: {
+  heroTitle: {
+    color: '#FFF',
+    fontSize: 42,
     fontFamily: FONTS.bold,
-    fontSize: 16,
-    color: COLORS.primary2,
-    lineHeight: 22,
+    letterSpacing: -1,
     marginBottom: 8,
   },
-  cardDesc: {
+  heroSubtitle: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 16,
     fontFamily: FONTS.regular,
-    fontSize: 13,
-    color: COLORS.gray,
-    lineHeight: 20,
-    marginTop: 8,
+    lineHeight: 24,
+    marginBottom: 16,
   },
-
-  locationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  locationText: {
+  heroStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statText: {
+    color: '#FFF',
+    fontSize: 14,
     fontFamily: FONTS.medium,
-    fontSize: 13,
-    color: COLORS.gray,
-    flex: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginHorizontal: 16,
   },
 
-  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 12 },
-  tag: {
-    backgroundColor: "#f0fdf4",
+  // Quick Actions
+  quickActionsWrapper: {
+    marginTop: -30,
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  quickActionsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 16,
+    justifyContent: 'space-around',
+    ...SHADOWS.medium,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  quickActionItem: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickActionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionLabel: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: '#374151',
+  },
+
+  // Featured Banner
+  featuredBanner: {
+    marginHorizontal: 20,
+    marginTop: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...SHADOWS.medium,
+  },
+  featuredGradient: {
+    flexDirection: 'row',
+    padding: 20,
+    minHeight: 140,
+  },
+  featuredContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  featuredBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  featuredBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+  },
+  featuredTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontFamily: FONTS.bold,
+    marginBottom: 4,
+  },
+  featuredDesc: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    marginBottom: 12,
+  },
+  featuredBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    gap: 6,
+  },
+  featuredBtnText: {
+    color: '#764BA2',
+    fontSize: 13,
+    fontFamily: FONTS.bold,
+  },
+  featuredImageWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginLeft: 12,
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  // Sections
+  contentContainer: {
+    marginTop: 28,
+  },
+  section: {
+    marginBottom: 28,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  sectionTitleWrap: {},
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: FONTS.bold,
+    color: '#1F2937',
+    letterSpacing: -0.3,
+  },
+  sectionLine: {
+    width: 40,
+    height: 3,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+    marginTop: 6,
+  },
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.primary,
+  },
+  cardsScroll: {
+    paddingHorizontal: 20,
+  },
+
+  // Cards
+  card: {
+    width: CARD_WIDTH,
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    marginLeft: 16,
+    overflow: 'hidden',
+    ...SHADOWS.medium,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  cardImageContainer: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cardGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 80,
+  },
+  cardRating: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
+    ...SHADOWS.small,
+  },
+  cardRatingText: {
+    fontSize: 13,
+    fontFamily: FONTS.bold,
+    color: '#1F2937',
+  },
+  cardCategory: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#dcfce7",
   },
-  tagText: { fontFamily: FONTS.medium, fontSize: 11, color: "#15803d" },
-
-  detailBtn: {
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    paddingVertical: 11,
-    backgroundColor: COLORS.white,
-  },
-  detailBtnText: {
+  cardCategoryText: {
+    fontSize: 11,
     fontFamily: FONTS.semiBold,
-    color: COLORS.primary,
-    fontSize: 14,
+    color: '#374151',
   },
-
-  featuresSection: {
-    paddingHorizontal: SIZES.large,
-    marginTop: SIZES.xLarge,
-    marginBottom: SIZES.large,
+  favoriteBtn: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  featuresTitle: {
+  cardDetails: {
+    padding: 16,
+  },
+  cardTitle: {
+    fontSize: 17,
     fontFamily: FONTS.bold,
-    fontSize: 22,
-    color: COLORS.primary2,
-    textAlign: "center",
-    marginBottom: SIZES.large,
-    letterSpacing: -0.5,
-  },
-  featuresGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  featureCard: {
-    width: (width - SIZES.large * 2 - 12) / 2,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: SIZES.medium + 4,
-    alignItems: "center",
-    ...SHADOWS.small,
-  },
-  featureIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#f0fdf4",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  featureTitle: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 15,
-    color: COLORS.primary2,
+    color: '#1F2937',
     marginBottom: 6,
   },
-  featureDesc: {
+  cardLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardLocationText: {
+    fontSize: 13,
+    fontFamily: FONTS.medium,
+    color: '#6B7280',
+    flex: 1,
+  },
+  cardDesc: {
+    fontSize: 13,
     fontFamily: FONTS.regular,
-    fontSize: 12,
-    color: COLORS.gray,
-    textAlign: "center",
-    lineHeight: 18,
+    color: '#9CA3AF',
+    marginTop: 8,
+    lineHeight: 19,
   },
 
-  bottomCta: {
-    marginHorizontal: SIZES.large,
-    marginTop: SIZES.xLarge,
+  // Explore CTA
+  exploreCta: {
+    marginHorizontal: 20,
+    marginTop: 8,
     borderRadius: 24,
-    backgroundColor: "#f0fdf4",
-    padding: SIZES.xLarge,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#dcfce7",
-    ...SHADOWS.small,
+    overflow: 'hidden',
   },
-  bottomCtaIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: COLORS.white,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: SIZES.medium,
-    ...SHADOWS.small,
+  exploreGradient: {
+    padding: 28,
+    alignItems: 'center',
+    position: 'relative',
   },
-  bottomTitle: {
+  exploreIcon: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  exploreTitle: {
+    fontSize: 22,
     fontFamily: FONTS.bold,
-    fontSize: 24,
-    color: COLORS.primary2,
-    textAlign: "center",
-    marginBottom: SIZES.small,
-    letterSpacing: -0.5,
+    color: '#FFF',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  bottomDesc: {
-    fontFamily: FONTS.regular,
+  exploreDesc: {
     fontSize: 14,
-    color: COLORS.gray,
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: SIZES.large,
+    fontFamily: FONTS.regular,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  bottomBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#15803d",
-    paddingHorizontal: SIZES.xLarge + 4,
+  exploreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 14,
-    ...SHADOWS.medium,
+    borderRadius: 30,
+    gap: 8,
+    ...SHADOWS.small,
   },
-  bottomBtnText: {
-    color: COLORS.white,
-    fontFamily: FONTS.semiBold,
-    fontSize: 16,
+  exploreBtnText: {
+    color: '#059669',
+    fontSize: 15,
+    fontFamily: FONTS.bold,
   },
 
-  bottomPadding: { height: SIZES.xLarge },
+  loadingFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
 });

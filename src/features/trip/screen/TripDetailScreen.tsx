@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,6 +37,16 @@ const getTripDayOfWeek = (tripStart?: string | null, dayIndex?: number | null) =
   const d = new Date(start);
   d.setDate(d.getDate() + offsetDays);
   return d.getDay(); // 0-6
+};
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+const formatTripRangeShort = (start?: string | null, end?: string | null) => {
+  // keep it simple: reuse your existing formatter but shorten by splitting
+  const s = start ? formatThaiDateTime(start) : "-";
+  const e = end ? formatThaiDateTime(end) : "-";
+  // If your formatter returns a long string, still OK. This is just a compact line.
+  return `${s} • ${e}`;
 };
 
 // ---------- minimal types ----------
@@ -86,7 +98,9 @@ export default function TripDetailScreen() {
   const [deleteTrip, { isLoading: isDeleting }] = useDeleteTripMutation();
 
   const [tab, setTab] = useState<"items" | "segments">("items");
-  const [dayFilter, setDayFilter] = useState<number>(0); // 0 = all
+  const [daySelected, setDaySelected] = useState<number>(1); // ✅ day is the primary context
+  const [showDetails, setShowDetails] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // ---- sort items ----
   const itemsSorted = useMemo(() => {
@@ -106,14 +120,27 @@ export default function TripDetailScreen() {
     return Array.from({ length: Math.max(max, 1) }, (_, i) => i + 1);
   }, [itemsSorted]);
 
-  // ---- filtered items ----
-  const filteredItems = useMemo(() => {
-    if (dayFilter === 0) return itemsSorted;
-    return itemsSorted.filter((x) => x.dayIndex === dayFilter);
-  }, [itemsSorted, dayFilter]);
+  // ✅ default daySelected = first day that has items (or 1)
+  useEffect(() => {
+    if (!days.length) return;
+    const firstWithItems = itemsSorted.find((x) => x.dayIndex)?.dayIndex ?? 1;
+    setDaySelected((prev) => {
+      // keep user's selection if still valid
+      if (days.includes(prev)) return prev;
+      return clamp(firstWithItems, 1, days[days.length - 1]);
+    });
+  }, [days, itemsSorted]);
+
+  // ---- items by selected day ----
+  const itemsForDay = useMemo(() => {
+    return itemsSorted.filter((x) => x.dayIndex === daySelected);
+  }, [itemsSorted, daySelected]);
 
   // unique placeIds
-  const placeIds = useMemo(() => Array.from(new Set(itemsSorted.map((x) => x.placeId))), [itemsSorted]);
+  const placeIds = useMemo(
+    () => Array.from(new Set(itemsSorted.map((x) => x.placeId))),
+    [itemsSorted]
+  );
 
   // places map
   const { map: placeMap, isLoading: isPlacesLoading } = usePlacesByIds(placeIds);
@@ -153,6 +180,16 @@ export default function TripDetailScreen() {
     };
   }, [placeIds, triggerOpening]);
 
+  const renderOpeningText = (placeId: number, dayIndex: number) => {
+    const dow = getTripDayOfWeek(data?.startDateTime ?? null, dayIndex);
+    const list = openingByPlace.get(placeId) ?? [];
+    const oh = dow == null ? null : list.find((x) => x.dayOfWeek === dow);
+
+    if (!oh) return "ไม่ระบุ";
+    if (oh.isClosed) return "ปิดทำการ";
+    return `${toHHMM(oh.openTime)} - ${toHHMM(oh.closeTime)} น.`;
+  };
+
   // ---- itemById (for segments) ----
   const itemById = useMemo(() => {
     const m = new Map<number, { order: number; day: number; placeId: number; name: string }>();
@@ -168,33 +205,23 @@ export default function TripDetailScreen() {
     return m;
   }, [itemsSorted, placeMap]);
 
-  // ---- segments totals ----
-  const segTotals = useMemo(() => {
+  // ---- segments filtered by selected day ----
+  const segmentsForDay = useMemo(() => {
     const segs = data?.segments ?? [];
+    return segs.filter((s) => (itemById.get(s.fromTripItemId)?.day ?? 0) === daySelected);
+  }, [data?.segments, daySelected, itemById]);
+
+  // ---- totals by selected day ----
+  const dayTotals = useMemo(() => {
+    const segs = segmentsForDay;
     const km = segs.reduce((a, s) => a + (s.distanceKm ?? 0), 0);
     const min = segs.reduce((a, s) => a + (s.travelMinutes ?? 0), 0);
     return { km, min };
-  }, [data?.segments]);
+  }, [segmentsForDay]);
 
-  // ---- segments filtered by day ----
-  const filteredSegments = useMemo(() => {
-    const segs = data?.segments ?? [];
-    if (dayFilter === 0) return segs;
-    return segs.filter((s) => (itemById.get(s.fromTripItemId)?.day ?? 0) === dayFilter);
-  }, [data?.segments, dayFilter, itemById]);
-
-  const renderOpeningText = (placeId: number, dayIndex: number) => {
-    const dow = getTripDayOfWeek(data?.startDateTime ?? null, dayIndex);
-    const list = openingByPlace.get(placeId) ?? [];
-    const oh = dow == null ? null : list.find((x) => x.dayOfWeek === dow);
-
-    if (!oh) return "ไม่ระบุ";
-    if (oh.isClosed) return "ปิดทำการ";
-    return `${toHHMM(oh.openTime)} - ${toHHMM(oh.closeTime)} น.`;
-  };
-
-  // ---- delete ----
+  // ---- delete (moved to menu) ----
   const handleDelete = () => {
+    setMenuOpen(false);
     Alert.alert("ยืนยันการลบ", "ต้องการลบทริปนี้ใช่ไหม? (ไม่สามารถกู้คืนได้)", [
       { text: "ยกเลิก", style: "cancel" },
       {
@@ -272,17 +299,75 @@ export default function TripDetailScreen() {
     );
   }
 
+  const dayCount = days.length || 1;
+
   // ---- main ----
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Top Bar */}
+      {/* Top Bar (with menu) */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#2A4D50" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
+          <Ionicons name="arrow-back" size={22} color="#2A4D50" />
         </TouchableOpacity>
+
         <View style={{ flex: 1 }}>
-          <Text style={styles.topBarTitle}>รายละเอียดทริป</Text>
-          <Text style={styles.topBarSub}>ทริป #{tripId}</Text>
+          <Text style={styles.title} numberOfLines={1}>
+            {data.title || `ทริป #${tripId}`}
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {dayCount} วัน • {data.items.length} สถานที่
+          </Text>
+        </View>
+
+        <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.iconBtn}>
+          <Ionicons name="ellipsis-horizontal" size={22} color="#2A4D50" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Sticky Day Tabs + Main Tabs */}
+      <View style={styles.stickyTop}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dayTabs}
+        >
+          {days.map((d) => (
+            <TouchableOpacity
+              key={d}
+              onPress={() => setDaySelected(d)}
+              style={[styles.dayTab, daySelected === d && styles.dayTabActive]}
+            >
+              <Text style={[styles.dayTabText, daySelected === d && styles.dayTabTextActive]}>
+                วัน {d}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <View style={styles.tabsCard}>
+          <TouchableOpacity
+            onPress={() => setTab("items")}
+            style={[styles.tab, tab === "items" && styles.tabActive]}
+          >
+            <Ionicons name="location" size={18} color={tab === "items" ? "#fff" : "#83829A"} />
+            <Text style={[styles.tabText, tab === "items" && styles.tabTextActive]}>
+              สถานที่
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setTab("segments")}
+            style={[styles.tab, tab === "segments" && styles.tabActive]}
+          >
+            <MaterialCommunityIcons
+              name="routes"
+              size={18}
+              color={tab === "segments" ? "#fff" : "#83829A"}
+            />
+            <Text style={[styles.tabText, tab === "segments" && styles.tabTextActive]}>
+              การเดินทาง
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -290,72 +375,49 @@ export default function TripDetailScreen() {
         contentContainerStyle={[styles.page, { paddingBottom: 16 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Card */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroHeader}>
-            <View style={styles.heroIconBadge}>
-              <Ionicons name="map" size={24} color="#2A4D50" />
+        {/* Summary Card (compact) */}
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryTopRow}>
+            <View style={styles.summaryIcon}>
+              <Ionicons name="map" size={20} color="#2A4D50" />
             </View>
-            <Text style={styles.heroTitle} numberOfLines={2}>{data.title}</Text>
-          </View>
-
-          {/* Date Info */}
-          <View style={styles.dateInfo}>
-            <View style={styles.dateRow}>
-              <Ionicons name="calendar" size={18} color="#10b981" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.dateLabel}>เริ่มต้น</Text>
-                <Text style={styles.dateValue}>{formatThaiDateTime(data.startDateTime ?? "")}</Text>
-              </View>
-            </View>
-            <View style={styles.dateDivider} />
-            <View style={styles.dateRow}>
-              <Ionicons name="calendar-outline" size={18} color="#FF7754" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.dateLabel}>สิ้นสุด</Text>
-                <Text style={styles.dateValue}>{formatThaiDateTime(data.endDateTime ?? "")}</Text>
-              </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryTitle} numberOfLines={2}>
+                {data.title}
+              </Text>
+              <Text style={styles.summaryRange} numberOfLines={1}>
+                {formatTripRangeShort(data.startDateTime ?? null, data.endDateTime ?? null)}
+              </Text>
             </View>
           </View>
 
-          {/* Description */}
           {!!data.description && (
-            <View style={styles.descCard}>
-              <View style={styles.descHeader}>
-                <Ionicons name="document-text" size={16} color="#2A4D50" />
-                <Text style={styles.descHeaderText}>รายละเอียด</Text>
-              </View>
-              <Text style={styles.descText}>{data.description}</Text>
-            </View>
+            <TouchableOpacity onPress={() => setShowDetails((v) => !v)} style={styles.detailsToggle}>
+              <Ionicons name={showDetails ? "chevron-up" : "chevron-down"} size={18} color="#2A4D50" />
+              <Text style={styles.detailsToggleText}>
+                {showDetails ? "ซ่อนรายละเอียดทริป" : "ดูรายละเอียดทริป"}
+              </Text>
+            </TouchableOpacity>
           )}
 
-          {/* Stats */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Ionicons name="location" size={20} color="#2A4D50" />
-              <Text style={styles.statValue}>{data.items.length}</Text>
-              <Text style={styles.statLabel}>สถานที่</Text>
+          {showDetails && (
+            <View style={styles.detailsBox}>
+              {!!data.description && <Text style={styles.detailsText}>{data.description}</Text>}
+
+              <View style={styles.detailsRow}>
+                <Ionicons name="calendar" size={16} color="#10b981" />
+                <Text style={styles.detailsRowText}>
+                  เริ่ม: {formatThaiDateTime(data.startDateTime ?? "")}
+                </Text>
+              </View>
+              <View style={styles.detailsRow}>
+                <Ionicons name="calendar-outline" size={16} color="#FF7754" />
+                <Text style={styles.detailsRowText}>
+                  จบ: {formatThaiDateTime(data.endDateTime ?? "")}
+                </Text>
+              </View>
             </View>
-            <View style={styles.statCard}>
-              <MaterialCommunityIcons name="routes" size={20} color="#7c3aed" />
-              <Text style={styles.statValue}>{data.segments.length}</Text>
-              <Text style={styles.statLabel}>เส้นทาง</Text>
-            </View>
-            {data.segments.length > 0 && (
-              <>
-                <View style={styles.statCard}>
-                  <MaterialCommunityIcons name="map-marker-distance" size={20} color="#10b981" />
-                  <Text style={styles.statValue}>{segTotals.km.toFixed(1)}</Text>
-                  <Text style={styles.statLabel}>กม.</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Ionicons name="time" size={20} color="#FF7754" />
-                  <Text style={styles.statValue}>{segTotals.min}</Text>
-                  <Text style={styles.statLabel}>นาที</Text>
-                </View>
-              </>
-            )}
-          </View>
+          )}
 
           {isPlacesLoading && (
             <View style={styles.loadingBanner}>
@@ -365,92 +427,25 @@ export default function TripDetailScreen() {
           )}
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
+        {/* Primary CTA (single hero action for "ดูแผน") */}
+        <View style={styles.ctaRow}>
           <TouchableOpacity
-            onPress={() => navigation.navigate("TripPlannerScreen", { tripId })}
-            style={styles.actionBtn}
-          >
-            <Ionicons name="calendar" size={18} color="#fff" />
-            <Text style={styles.actionBtnText}>วางแผน</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => navigation.navigate("TripMapScreen", { tripId })}
-            style={[styles.actionBtn, styles.actionBtnMap]}
+            onPress={() => navigation.navigate("TripMapScreen", { tripId, dayIndex: daySelected })}
+            style={styles.primaryCta}
           >
             <Ionicons name="map" size={18} color="#fff" />
-            <Text style={styles.actionBtnText}>แผนที่</Text>
+            <Text style={styles.primaryCtaText}>เปิดแผนที่วันนี้ (วัน {daySelected})</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={handleDelete}
-            disabled={isDeleting}
-            style={[styles.actionBtn, styles.actionBtnDelete, isDeleting && styles.actionBtnDisabled]}
+            onPress={() => navigation.navigate("TripPlannerScreen", { tripId })}
+            style={styles.secondaryCta}
           >
-            {isDeleting ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="trash" size={18} color="#fff" />
-            )}
-            <Text style={styles.actionBtnText}>{isDeleting ? "กำลังลบ..." : "ลบ"}</Text>
+            <Ionicons name="create-outline" size={18} color="#2A4D50" />
           </TouchableOpacity>
         </View>
 
-        {/* Tabs */}
-        <View style={styles.tabsCard}>
-          <TouchableOpacity
-            onPress={() => setTab("items")}
-            style={[styles.tab, tab === "items" && styles.tabActive]}
-          >
-            <Ionicons name="location" size={20} color={tab === "items" ? "#fff" : "#83829A"} />
-            <Text style={[styles.tabText, tab === "items" && styles.tabTextActive]}>
-              รายการสถานที่
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setTab("segments")}
-            style={[styles.tab, tab === "segments" && styles.tabActive]}
-          >
-            <MaterialCommunityIcons name="routes" size={20} color={tab === "segments" ? "#fff" : "#83829A"} />
-            <Text style={[styles.tabText, tab === "segments" && styles.tabTextActive]}>
-              เส้นทาง
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Day Filter */}
-        <View style={styles.filterCard}>
-          <View style={styles.filterHeader}>
-            <Ionicons name="funnel" size={16} color="#2A4D50" />
-            <Text style={styles.filterLabel}>กรองตามวัน</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-            <TouchableOpacity
-              onPress={() => setDayFilter(0)}
-              style={[styles.filterChip, dayFilter === 0 && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, dayFilter === 0 && styles.filterChipTextActive]}>
-                ทั้งหมด
-              </Text>
-            </TouchableOpacity>
-
-            {days.map((d) => (
-              <TouchableOpacity
-                key={d}
-                onPress={() => setDayFilter(d)}
-                style={[styles.filterChip, dayFilter === d && styles.filterChipActive]}
-              >
-                <Text style={[styles.filterChipText, dayFilter === d && styles.filterChipTextActive]}>
-                  วันที่ {d}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Body Content */}
+        {/* Body */}
         {tab === "items" ? (
           data.items.length === 0 ? (
             <View style={styles.emptyState}>
@@ -458,208 +453,270 @@ export default function TripDetailScreen() {
                 <Ionicons name="location-outline" size={64} color="#C1C0C8" />
               </View>
               <Text style={styles.emptyTitle}>ยังไม่มีสถานที่ในทริป</Text>
-              <Text style={styles.emptyText}>เริ่มต้นวางแผนการเดินทางโดยเพิ่มสถานที่ที่ต้องการไป</Text>
+              <Text style={styles.emptyText}>เพิ่มสถานที่เพื่อเริ่มวางแผนการเดินทาง</Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate("TripPlannerScreen", { tripId })}
                 style={styles.emptyAction}
               >
                 <Ionicons name="add-circle" size={18} color="#fff" />
-                <Text style={styles.emptyActionText}>วางแผนการเดินทาง</Text>
+                <Text style={styles.emptyActionText}>ไปหน้าวางแผน</Text>
+              </TouchableOpacity>
+            </View>
+          ) : itemsForDay.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="calendar-outline" size={64} color="#C1C0C8" />
+              </View>
+              <Text style={styles.emptyTitle}>วัน {daySelected} ยังไม่มีสถานที่</Text>
+              <Text style={styles.emptyText}>เพิ่มสถานที่ในวันนี้จากหน้าวางแผน</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("TripPlannerScreen", { tripId })}
+                style={styles.emptyAction}
+              >
+                <Ionicons name="create" size={18} color="#fff" />
+                <Text style={styles.emptyActionText}>ไปหน้าวางแผน</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.itemsList}>
-              {filteredItems.map((it, idx) => {
+            <View style={styles.timeline}>
+              {itemsForDay.map((it, idx) => {
                 const p: any = placeMap.get(it.placeId);
                 const name = p?.name ?? `Place #${it.placeId}`;
+                const openText = renderOpeningText(it.placeId, it.dayIndex);
+                const visitText = p?.avgVisitMinutes ? `${p.avgVisitMinutes} นาที` : "60 นาที";
+
+                // Timeline connectors
+                const isLast = idx === itemsForDay.length - 1;
 
                 return (
-                  <View key={it.tripItemId} style={styles.placeCard}>
-                    {/* Place Header */}
-                    <View style={styles.placeHeader}>
-                      <View style={styles.placeNumber}>
-                        <Text style={styles.placeNumberText}>{it.orderIndex ?? idx + 1}</Text>
+                  <View key={it.tripItemId} style={styles.timelineRow}>
+                    {/* Left rail */}
+                    <View style={styles.rail}>
+                      <View style={styles.railDot}>
+                        <Text style={styles.railDotText}>{it.orderIndex ?? idx + 1}</Text>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.placeName} numberOfLines={2}>{name}</Text>
-                        <View style={styles.placeBadges}>
-                          <View style={styles.dayBadge}>
-                            <Ionicons name="calendar-outline" size={12} color="#2A4D50" />
-                            <Text style={styles.dayBadgeText}>วันที่ {it.dayIndex}</Text>
-                          </View>
-                          <View style={styles.orderBadge}>
-                            <Ionicons name="list" size={12} color="#7c3aed" />
-                            <Text style={styles.orderBadgeText}>ลำดับ {it.orderIndex}</Text>
-                          </View>
-                        </View>
-                      </View>
+                      {!isLast && <View style={styles.railLine} />}
                     </View>
 
-                    {/* Place Details */}
-                    <View style={styles.placeDetails}>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="time-outline" size={16} color="#10b981" />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.detailLabel}>เวลาทำการ</Text>
-                          <Text style={styles.detailValue}>
-                            {renderOpeningText(it.placeId, it.dayIndex)}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.detailRow}>
-                        <Ionicons name="hourglass-outline" size={16} color="#FF7754" />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.detailLabel}>ระยะเวลาแนะนำ</Text>
-                          <Text style={styles.detailValue}>
-                            {p?.avgVisitMinutes ? `${p.avgVisitMinutes} นาที` : "60 นาที"}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Address */}
-                    {!!p?.address && (
-                      <View style={styles.addressRow}>
-                        <Ionicons name="location-outline" size={14} color="#83829A" />
-                        <Text style={styles.addressText} numberOfLines={2}>{p.address}</Text>
-                      </View>
-                    )}
-
-                    {/* Action */}
+                    {/* Card (tap whole card) */}
                     <TouchableOpacity
-                      onPress={() => navigation.navigate("PlaceUserDetailScreen", { placeId: it.placeId })}
-                      style={styles.placeAction}
+                      activeOpacity={0.9}
+                      onPress={() =>
+                        navigation.navigate("PlaceUserDetailScreen", { placeId: it.placeId })
+                      }
+                      style={styles.placeCardNew}
                     >
-                      <Text style={styles.placeActionText}>ดูรายละเอียด</Text>
-                      <Ionicons name="chevron-forward" size={16} color="#2A4D50" />
+                      <Text style={styles.placeNameNew} numberOfLines={2}>
+                        {name}
+                      </Text>
+
+                      <View style={styles.metricsRow}>
+                        <View style={styles.metricPill}>
+                          <Ionicons name="time-outline" size={14} color="#10b981" />
+                          <Text style={styles.metricText} numberOfLines={1}>
+                            {openText}
+                          </Text>
+                        </View>
+
+                        <View style={styles.metricPill}>
+                          <Ionicons name="hourglass-outline" size={14} color="#FF7754" />
+                          <Text style={styles.metricText} numberOfLines={1}>
+                            {visitText}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {!!p?.address && (
+                        <Text style={styles.addressNew} numberOfLines={1}>
+                          {p.address}
+                        </Text>
+                      )}
+
+                      <View style={styles.cardFooter}>
+                        <Text style={styles.cardFooterText}>ดูรายละเอียด</Text>
+                        <Ionicons name="chevron-forward" size={16} color="#2A4D50" />
+                      </View>
                     </TouchableOpacity>
                   </View>
                 );
               })}
             </View>
           )
-        ) : data.segments.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <MaterialCommunityIcons name="routes" size={64} color="#C1C0C8" />
-            </View>
-            <Text style={styles.emptyTitle}>ยังไม่มีข้อมูลเส้นทาง</Text>
-            <Text style={styles.emptyText}>เส้นทางจะถูกสร้างเมื่อมีสถานที่อย่างน้อย 2 จุดและคำนวณเส้นทาง</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("TripMapScreen", { tripId })}
-              style={[styles.emptyAction, styles.emptyActionMap]}
-            >
-              <Ionicons name="map" size={18} color="#fff" />
-              <Text style={styles.emptyActionText}>ไปหน้าแผนที่</Text>
-            </TouchableOpacity>
-          </View>
-        ) : filteredSegments.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="navigate-outline" size={64} color="#C1C0C8" />
-            </View>
-            <Text style={styles.emptyTitle}>ไม่มีเส้นทางในวันนี้</Text>
-            <Text style={styles.emptyText}>ลองเลือก "ทั้งหมด" หรือคำนวณเส้นทางของวันนั้นก่อน</Text>
-          </View>
         ) : (
-          <View style={styles.segmentsList}>
-            {filteredSegments.map((s) => {
-              const from = itemById.get(s.fromTripItemId);
-              const to = itemById.get(s.toTripItemId);
-
-              return (
-                <View
-                  key={s.tripSegmentId ?? `${s.fromTripItemId}-${s.toTripItemId}`}
-                  style={styles.segmentCard}
-                >
-                  {/* Segment Header */}
-                  <View style={styles.segmentHeader}>
-                    <View style={styles.segmentRoute}>
-                      <View style={styles.segmentPoint}>
-                        <Text style={styles.segmentPointText}>#{from?.order ?? "?"}</Text>
-                      </View>
-                      <View style={styles.segmentArrow}>
-                        <Ionicons name="arrow-forward" size={16} color="#83829A" />
-                      </View>
-                      <View style={styles.segmentPoint}>
-                        <Text style={styles.segmentPointText}>#{to?.order ?? "?"}</Text>
-                      </View>
-                    </View>
-                    {!!from?.day && (
-                      <View style={styles.segmentDayBadge}>
-                        <Ionicons name="calendar-outline" size={12} color="#2A4D50" />
-                        <Text style={styles.segmentDayText}>วันที่ {from.day}</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Route Names */}
-                  <View style={styles.segmentNames}>
-                    <Text style={styles.segmentFromName} numberOfLines={1}>{from?.name ?? `#${s.fromTripItemId}`}</Text>
-                    <Ionicons name="arrow-forward" size={14} color="#C1C0C8" />
-                    <Text style={styles.segmentToName} numberOfLines={1}>{to?.name ?? `#${s.toTripItemId}`}</Text>
-                  </View>
-
-                  {/* Segment Stats */}
-                  <View style={styles.segmentStats}>
-                    <View style={styles.segmentStat}>
-                      <MaterialCommunityIcons name="map-marker-distance" size={16} color="#10b981" />
-                      <Text style={styles.segmentStatLabel}>ระยะทาง</Text>
-                      <Text style={styles.segmentStatValue}>{(s.distanceKm ?? 0).toFixed(2)} กม.</Text>
-                    </View>
-                    <View style={styles.segmentStatDivider} />
-                    <View style={styles.segmentStat}>
-                      <Ionicons name="time" size={16} color="#FF7754" />
-                      <Text style={styles.segmentStatLabel}>เวลา</Text>
-                      <Text style={styles.segmentStatValue}>{s.travelMinutes ?? 0} นาที</Text>
-                    </View>
-                    <View style={styles.segmentStatDivider} />
-                    <View style={styles.segmentStat}>
-                      <MaterialCommunityIcons name="car" size={16} color="#7c3aed" />
-                      <Text style={styles.segmentStatLabel}>ประเภท</Text>
-                      <Text style={styles.segmentStatValue}>{String(s.transportMode ?? "รถยนต์")}</Text>
-                    </View>
-                  </View>
+          <>
+            {/* Day summary */}
+            <View style={styles.daySummary}>
+              <View style={styles.daySummaryLeft}>
+                <MaterialCommunityIcons name="routes" size={18} color="#2A4D50" />
+                <Text style={styles.daySummaryTitle}>สรุปการเดินทาง • วัน {daySelected}</Text>
+              </View>
+              <View style={styles.daySummaryStats}>
+                <View style={styles.daySummaryStat}>
+                  <MaterialCommunityIcons
+                    name="map-marker-distance"
+                    size={16}
+                    color="#10b981"
+                  />
+                  <Text style={styles.daySummaryValue}>{dayTotals.km.toFixed(1)} กม.</Text>
                 </View>
-              );
-            })}
+                <View style={styles.daySummaryDivider} />
+                <View style={styles.daySummaryStat}>
+                  <Ionicons name="time" size={16} color="#FF7754" />
+                  <Text style={styles.daySummaryValue}>{dayTotals.min} นาที</Text>
+                </View>
+              </View>
+            </View>
 
-            <TouchableOpacity
-              onPress={() => navigation.navigate("TripMapScreen", { tripId })}
-              style={styles.viewMapBtn}
-            >
-              <Ionicons name="map" size={18} color="#fff" />
-              <Text style={styles.viewMapBtnText}>ดูแผนที่ทั้งหมด</Text>
-            </TouchableOpacity>
-          </View>
+            {data.segments.length === 0 ? (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIcon}>
+                  <MaterialCommunityIcons name="routes" size={64} color="#C1C0C8" />
+                </View>
+                <Text style={styles.emptyTitle}>ยังไม่มีข้อมูลเส้นทาง</Text>
+                <Text style={styles.emptyText}>เส้นทางจะถูกสร้างเมื่อมีสถานที่อย่างน้อย 2 จุด</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("TripMapScreen", { tripId })}
+                  style={[styles.emptyAction, styles.emptyActionMap]}
+                >
+                  <Ionicons name="map" size={18} color="#fff" />
+                  <Text style={styles.emptyActionText}>ไปหน้าแผนที่</Text>
+                </TouchableOpacity>
+              </View>
+            ) : segmentsForDay.length === 0 ? (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="navigate-outline" size={64} color="#C1C0C8" />
+                </View>
+                <Text style={styles.emptyTitle}>วัน {daySelected} ไม่มีเส้นทาง</Text>
+                <Text style={styles.emptyText}>ลองคำนวณเส้นทางจากหน้าแผนที่</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("TripMapScreen", { tripId, dayIndex: daySelected })}
+                  style={[styles.emptyAction, styles.emptyActionMap]}
+                >
+                  <Ionicons name="map" size={18} color="#fff" />
+                  <Text style={styles.emptyActionText}>เปิดแผนที่วันนี้</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.segmentsList}>
+                {segmentsForDay.map((s) => {
+                  const from = itemById.get(s.fromTripItemId);
+                  const to = itemById.get(s.toTripItemId);
+
+                  const distanceText = `${(s.distanceKm ?? 0).toFixed(2)} กม.`;
+                  const timeText = `${s.travelMinutes ?? 0} นาที`;
+                  const modeText = String(s.transportMode ?? "รถยนต์");
+
+                  return (
+                    <View
+                      key={s.tripSegmentId ?? `${s.fromTripItemId}-${s.toTripItemId}`}
+                      style={styles.segmentCardNew}
+                    >
+                      <View style={styles.segmentTop}>
+                        <View style={styles.segmentBadge}>
+                          <Text style={styles.segmentBadgeText}>
+                            #{from?.order ?? "?"} → #{to?.order ?? "?"}
+                          </Text>
+                        </View>
+                        <Text style={styles.segmentTopRight}>
+                          {distanceText} • {timeText}
+                        </Text>
+                      </View>
+
+                      <View style={styles.segmentNamesNew}>
+                        <Text style={styles.segmentNameLeft} numberOfLines={1}>
+                          {from?.name ?? `#${s.fromTripItemId}`}
+                        </Text>
+                        <Ionicons name="arrow-forward" size={14} color="#C1C0C8" />
+                        <Text style={styles.segmentNameRight} numberOfLines={1}>
+                          {to?.name ?? `#${s.toTripItemId}`}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.segmentMode}>ประเภท: {modeText}</Text>
+                    </View>
+                  );
+                })}
+
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("TripMapScreen", { tripId, dayIndex: daySelected })}
+                  style={styles.viewMapBtn}
+                >
+                  <Ionicons name="map" size={18} color="#fff" />
+                  <Text style={styles.viewMapBtnText}>เปิดแผนที่วันนี้</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
+
+      {/* Menu Modal */}
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(false)}>
+          <View />
+        </Pressable>
+
+        <View style={[styles.menuSheet, { bottom: 16 + insets.bottom }]}>
+          <Text style={styles.menuTitle}>ตัวเลือก</Text>
+
+          <TouchableOpacity
+            onPress={() => {
+              setMenuOpen(false);
+              navigation.navigate("TripPlannerScreen", { tripId });
+            }}
+            style={styles.menuItem}
+          >
+            <Ionicons name="create-outline" size={18} color="#2A4D50" />
+            <Text style={styles.menuItemText}>แก้ไขแผน</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              setMenuOpen(false);
+              navigation.navigate("TripMapScreen", { tripId });
+            }}
+            style={styles.menuItem}
+          >
+            <Ionicons name="map-outline" size={18} color="#2A4D50" />
+            <Text style={styles.menuItemText}>เปิดแผนที่ทริป</Text>
+          </TouchableOpacity>
+
+          <View style={styles.menuDivider} />
+
+          <TouchableOpacity
+            onPress={handleDelete}
+            disabled={isDeleting}
+            style={[styles.menuItem, styles.menuItemDanger, isDeleting && { opacity: 0.6 }]}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color="#cc3300" />
+            ) : (
+              <Ionicons name="trash-outline" size={18} color="#cc3300" />
+            )}
+            <Text style={styles.menuItemDangerText}>ลบทริป</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { 
-    flex: 1, 
-    backgroundColor: "#F3F4F8" 
-  },
-  page: { 
-    padding: 20, 
-    gap: 16 
-  },
+  safe: { flex: 1, backgroundColor: "#F3F4F8" },
 
   // Top Bar
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
-    gap: 12,
+    gap: 10,
   },
-  backBtn: {
+  iconBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
@@ -667,176 +724,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  topBarTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#000",
-  },
-  topBarSub: {
-    fontSize: 12,
-    color: "#83829A",
-    marginTop: 2,
-  },
+  title: { fontSize: 18, fontWeight: "900", color: "#000" },
+  subtitle: { fontSize: 12, color: "#83829A", marginTop: 2, fontWeight: "600" },
 
-  // Hero Card
-  heroCard: {
+  // Sticky top area
+  stickyTop: {
+    backgroundColor: "#F3F4F8",
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  dayTabs: { paddingHorizontal: 16, gap: 8 },
+  dayTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
     backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    gap: 16,
-  },
-  heroHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  heroIconBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#F3F4F8",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#000",
-  },
-
-  // Date Info
-  dateInfo: {
-    backgroundColor: "#F3F4F8",
-    borderRadius: 16,
-    padding: 16,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  dateDivider: {
-    height: 1,
-    backgroundColor: "#e5e7eb",
-    marginVertical: 12,
-  },
-  dateLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#83829A",
-    marginBottom: 4,
-  },
-  dateValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#000",
-  },
-
-  // Description
-  descCard: {
-    backgroundColor: "#FFFBEB",
-    borderRadius: 14,
-    padding: 14,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#e5e7eb",
   },
-  descHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
-  descHeaderText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#92400E",
-  },
-  descText: {
-    fontSize: 14,
-    color: "#92400E",
-    lineHeight: 20,
-  },
-
-  // Stats Grid
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  statCard: {
-    flex: 1,
-    minWidth: 70,
-    backgroundColor: "#F3F4F8",
-    borderRadius: 14,
-    padding: 12,
-    alignItems: "center",
-    gap: 6,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#000",
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#83829A",
-  },
-
-  // Loading Banner
-  loadingBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#EFF6FF",
-    padding: 12,
-    borderRadius: 12,
-  },
-  loadingBannerText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#2563eb",
-  },
-
-  // Quick Actions
-  quickActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+  dayTabActive: {
     backgroundColor: "#2A4D50",
-    paddingVertical: 14,
-    borderRadius: 14,
+    borderColor: "#2A4D50",
   },
-  actionBtnMap: {
-    backgroundColor: "#7c3aed",
-  },
-  actionBtnDelete: {
-    backgroundColor: "#cc3300",
-  },
-  actionBtnDisabled: {
-    opacity: 0.5,
-  },
-  actionBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#fff",
-  },
+  dayTabText: { fontSize: 13, fontWeight: "800", color: "#475569" },
+  dayTabTextActive: { color: "#fff" },
 
   // Tabs
   tabsCard: {
     flexDirection: "row",
+    marginTop: 10,
+    marginHorizontal: 16,
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 6,
@@ -857,70 +776,217 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "transparent",
   },
-  tabActive: {
-    backgroundColor: "#2A4D50",
+  tabActive: { backgroundColor: "#2A4D50" },
+  tabText: { fontSize: 14, fontWeight: "900", color: "#83829A" },
+  tabTextActive: { color: "#fff" },
+
+  // Page
+  page: { padding: 16, gap: 12 },
+
+  // Summary card (compact)
+  summaryCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    gap: 12,
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#83829A",
+  summaryTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  summaryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F8",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  tabTextActive: {
-    color: "#fff",
+  summaryTitle: { fontSize: 18, fontWeight: "900", color: "#000" },
+  summaryRange: { fontSize: 12, fontWeight: "700", color: "#64748b", marginTop: 4 },
+
+  detailsToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+  },
+  detailsToggleText: { fontSize: 13, fontWeight: "800", color: "#2A4D50" },
+  detailsBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    gap: 10,
+  },
+  detailsText: { fontSize: 13, color: "#0f172a", lineHeight: 18 },
+  detailsRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  detailsRowText: { fontSize: 12, color: "#475569", fontWeight: "700" },
+
+  loadingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#EFF6FF",
+    padding: 12,
+    borderRadius: 12,
+  },
+  loadingBannerText: { fontSize: 13, fontWeight: "700", color: "#2563eb" },
+
+  // CTA
+  ctaRow: { flexDirection: "row", gap: 10 },
+  primaryCta: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#7c3aed", // map vibe
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  primaryCtaText: { fontSize: 14, fontWeight: "900", color: "#fff" },
+  secondaryCta: {
+    width: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
 
-  // Filter
-  filterCard: {
+  // Timeline
+  timeline: { gap: 12 },
+  timelineRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+
+  rail: { width: 28, alignItems: "center" },
+  railDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: "#2A4D50",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  railDotText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+  railLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: "#d1d5db",
+    marginTop: 8,
+    borderRadius: 2,
+  },
+
+  placeCardNew: {
+    flex: 1,
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-    gap: 12,
+    gap: 10,
   },
-  filterHeader: {
+  placeNameNew: { fontSize: 16, fontWeight: "900", color: "#000" },
+  metricsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  metricPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F3F4F8",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  metricText: { fontSize: 12, fontWeight: "800", color: "#0f172a" },
+  addressNew: { fontSize: 12, fontWeight: "700", color: "#64748b" },
+  cardFooter: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+  },
+  cardFooterText: { fontSize: 13, fontWeight: "900", color: "#2A4D50" },
+
+  // Day summary (segments)
+  daySummary: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 10,
+  },
+  daySummaryLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  daySummaryTitle: { fontSize: 14, fontWeight: "900", color: "#000" },
+  daySummaryStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F8",
+    borderRadius: 14,
+    padding: 12,
+  },
+  daySummaryStat: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center" },
+  daySummaryDivider: { width: 1, height: 18, backgroundColor: "#e5e7eb" },
+  daySummaryValue: { fontSize: 13, fontWeight: "900", color: "#000" },
+
+  // Segments list
+  segmentsList: { gap: 12 },
+  segmentCardNew: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 10,
+  },
+  segmentTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  segmentBadge: { backgroundColor: "#F3F4F8", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  segmentBadgeText: { fontSize: 12, fontWeight: "900", color: "#2A4D50" },
+  segmentTopRight: { fontSize: 12, fontWeight: "900", color: "#0f172a" },
+  segmentNamesNew: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#000",
-  },
-  filterChips: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F8",
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  filterChipActive: {
-    backgroundColor: "#2A4D50",
-    borderColor: "#2A4D50",
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#83829A",
-  },
-  filterChipTextActive: {
-    color: "#fff",
-  },
+  segmentNameLeft: { flex: 1, fontSize: 13, fontWeight: "900", color: "#000" },
+  segmentNameRight: { flex: 1, fontSize: 13, fontWeight: "900", color: "#475569", textAlign: "right" },
+  segmentMode: { fontSize: 12, fontWeight: "800", color: "#64748b" },
 
-  // Empty State
+  viewMapBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#7c3aed",
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  viewMapBtnText: { fontSize: 14, fontWeight: "900", color: "#fff" },
+
+  // Empty state
   emptyState: {
     backgroundColor: "#fff",
     borderRadius: 20,
-    padding: 40,
+    padding: 32,
     alignItems: "center",
     gap: 12,
     shadowColor: "#000",
@@ -930,297 +996,32 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   emptyIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: "#F3F4F8",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#000",
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#83829A",
-    textAlign: "center",
-    lineHeight: 20,
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "900", color: "#000", textAlign: "center" },
+  emptyText: { fontSize: 14, color: "#83829A", textAlign: "center", lineHeight: 20 },
   emptyAction: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: "#2A4D50",
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 14,
-    marginTop: 8,
-  },
-  emptyActionMap: {
-    backgroundColor: "#7c3aed",
-  },
-  emptyActionText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#fff",
-  },
-
-  // Places List
-  itemsList: {
-    gap: 12,
-  },
-  placeCard: {
-    backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    gap: 14,
+    marginTop: 6,
   },
-  placeHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  placeNumber: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#2A4D50",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeNumberText: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#fff",
-  },
-  placeName: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#000",
-    marginBottom: 8,
-  },
-  placeBadges: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  dayBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#EFF6FF",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  dayBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#2A4D50",
-  },
-  orderBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#FAF5FF",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  orderBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#7c3aed",
-  },
-  placeDetails: {
-    backgroundColor: "#F3F4F8",
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  detailLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#83829A",
-    marginBottom: 2,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#000",
-  },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
-  },
-  addressText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#83829A",
-    lineHeight: 16,
-  },
-  placeAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#F3F4F8",
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  placeActionText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#2A4D50",
-  },
-
-  // Segments List
-  segmentsList: {
-    gap: 12,
-  },
-  segmentCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    gap: 12,
-  },
-  segmentHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  segmentRoute: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  segmentPoint: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "#2A4D50",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentPointText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#fff",
-  },
-  segmentArrow: {
-    width: 24,
-    alignItems: "center",
-  },
-  segmentDayBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#EFF6FF",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  segmentDayText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#2A4D50",
-  },
-  segmentNames: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#F3F4F8",
-    padding: 12,
-    borderRadius: 12,
-  },
-  segmentFromName: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#000",
-  },
-  segmentToName: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#475569",
-    textAlign: "right",
-  },
-  segmentStats: {
-    flexDirection: "row",
-    backgroundColor: "#F3F4F8",
-    borderRadius: 12,
-    padding: 12,
-  },
-  segmentStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  segmentStatDivider: {
-    width: 1,
-    backgroundColor: "#e5e7eb",
-    marginHorizontal: 8,
-  },
-  segmentStatLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#83829A",
-  },
-  segmentStatValue: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#000",
-  },
-  viewMapBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#7c3aed",
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  viewMapBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#fff",
-  },
+  emptyActionMap: { backgroundColor: "#7c3aed" },
+  emptyActionText: { fontSize: 14, fontWeight: "900", color: "#fff" },
 
   // Loading & Error
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: "#83829A",
-    fontWeight: "600",
-  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 16 },
+  loadingText: { fontSize: 14, color: "#83829A", fontWeight: "700" },
   errorIcon: {
     width: 100,
     height: 100,
@@ -1230,23 +1031,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#000",
-    textAlign: "center",
-  },
-  errorText: {
-    fontSize: 14,
-    color: "#cc3300",
-    textAlign: "center",
-    marginTop: 8,
-  },
-  errorActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
-  },
+  errorTitle: { fontSize: 18, fontWeight: "900", color: "#000", textAlign: "center" },
+  errorText: { fontSize: 14, color: "#cc3300", textAlign: "center", marginTop: 8 },
+  errorActions: { flexDirection: "row", gap: 12, marginTop: 16 },
   btnPrimary: {
     flexDirection: "row",
     alignItems: "center",
@@ -1254,13 +1041,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2A4D50",
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
   },
-  btnPrimaryText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#fff",
-  },
+  btnPrimaryText: { fontSize: 14, fontWeight: "900", color: "#fff" },
   btnSecondary: {
     flexDirection: "row",
     alignItems: "center",
@@ -1270,11 +1053,43 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
   },
-  btnSecondaryText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#83829A",
+  btnSecondaryText: { fontSize: 14, fontWeight: "900", color: "#83829A" },
+
+  // Menu modal
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.25)" },
+  menuSheet: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+    gap: 10,
   },
+  menuTitle: { fontSize: 14, fontWeight: "900", color: "#000", marginBottom: 4 },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  menuItemText: { fontSize: 14, fontWeight: "900", color: "#0f172a" },
+  menuDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 4 },
+  menuItemDanger: {
+    backgroundColor: "#FFF1F2",
+    borderColor: "#fecdd3",
+  },
+  menuItemDangerText: { fontSize: 14, fontWeight: "900", color: "#cc3300" },
 });

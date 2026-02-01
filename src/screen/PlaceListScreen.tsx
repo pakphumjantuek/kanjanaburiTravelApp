@@ -28,12 +28,29 @@ import * as Location from "expo-location";
 
 import { useGetAllPlaceQuery } from "../features/places/placeApi";
 import { useDebounce } from "../utils/useDebounce";
-import { getPlaceImageUrl } from "../features/places/Components/placeListUtils";
 import { useGetAllPlaceCategoryQuery } from "../features/placeCategory/placeCategoryApi";
-import type { PlaceDto } from "../features/places/placeTypes"; // <- ปรับ path ให้ตรงของคุณ
+import type { PlaceDto } from "../features/places/placeTypes";
+import { getCoverUrl } from "../utils/imagepath";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_WIDTH = (SCREEN_WIDTH - 52) / 2;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
+
+// Nature Travel Color Palette
+const COLORS = {
+  primary: "#059669",
+  primaryDark: "#047857",
+  primaryLight: "#10B981",
+  secondary: "#0EA5E9",
+  accent: "#F59E0B",
+  background: "#ffffff",
+  card: "#FFFFFF",
+  text: "#1E293B",
+  textSecondary: "#64748B",
+  textMuted: "#94A3B8",
+  border: "#D1FAE5",
+  success: "#22C55E",
+  warning: "#F59E0B",
+};
 
 type PlaceWithDistance = PlaceDto & {
   distanceKm?: number | null;
@@ -62,7 +79,7 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number) {
 }
 
 // =======================
-// Category Chip
+// Category Chip - Modern Design
 // =======================
 const CategoryChip = memo(function CategoryChip({
   name,
@@ -73,24 +90,32 @@ const CategoryChip = memo(function CategoryChip({
   active: boolean;
   onPress: () => void;
 }) {
-  const icons: Record<string, string> = {
-    วัด: "🛕",
-    น้ำตก: "💧",
-    ภูเขา: "⛰️",
-    ทะเล: "🏖️",
-    ถ้ำ: "🕳️",
-    สวนสาธารณะ: "🌳",
-    พิพิธภัณฑ์: "🏛️",
-    ตลาด: "🛒",
+  const icons: Record<string, { emoji: string; color: string }> = {
+    วัด: { emoji: "🛕", color: "#F59E0B" },
+    น้ำตก: { emoji: "💧", color: "#3B82F6" },
+    ภูเขา: { emoji: "⛰️", color: "#22C55E" },
+    ทะเล: { emoji: "🏖️", color: "#06B6D4" },
+    ถ้ำ: { emoji: "🕳️", color: "#8B5CF6" },
+    สวนสาธารณะ: { emoji: "🌳", color: "#10B981" },
+    พิพิธภัณฑ์: { emoji: "🏛️", color: "#6366F1" },
+    ตลาด: { emoji: "🛒", color: "#EC4899" },
   };
+
+  const iconData = icons[name] || { emoji: "📍", color: COLORS.primary };
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.categoryChip, active && styles.categoryChipActive]}
-      activeOpacity={0.85}
+      style={[
+        styles.categoryChip,
+        active && {
+          backgroundColor: iconData.color,
+          borderColor: iconData.color,
+        },
+      ]}
+      activeOpacity={0.8}
     >
-      <Text style={styles.categoryChipIcon}>{icons[name] || "📍"}</Text>
+      <Text style={styles.categoryChipIcon}>{iconData.emoji}</Text>
       <Text
         style={[
           styles.categoryChipText,
@@ -99,17 +124,12 @@ const CategoryChip = memo(function CategoryChip({
       >
         {name}
       </Text>
-      {active && (
-        <View style={styles.chipCheckmark}>
-          <Ionicons name="checkmark" size={12} color="#fff" />
-        </View>
-      )}
     </TouchableOpacity>
   );
 });
 
 // =======================
-// Place Card
+// Place Card - Modern Glass Design
 // =======================
 const PlaceCard = memo(function PlaceCard({
   item,
@@ -121,41 +141,54 @@ const PlaceCard = memo(function PlaceCard({
   onPress: () => void;
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.96)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const translateY = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 420,
-        delay: index * 70,
+        duration: 500,
+        delay: index * 80,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 60,
+        tension: 50,
         friction: 8,
-        delay: index * 70,
+        delay: index * 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 500,
+        delay: index * 80,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [fadeAnim, scaleAnim, index]);
+  }, [fadeAnim, scaleAnim, translateY, index]);
 
-  const imageUrl = getPlaceImageUrl(item);
+  const imageUrl = getCoverUrl(item);
 
-  const ratingText = useMemo(() => {
-    const r = item?.averageRating ?? "4.5";
-    return String(r);
-  }, [item?.averageRating]);
+  const ratingValue =
+    typeof item?.averageRating === "number" ? item.averageRating : null;
+  const ratingText = ratingValue !== null ? ratingValue.toFixed(1) : "-";
 
   return (
     <Animated.View
       style={[
         styles.placeCard,
-        { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }, { translateY }],
+        },
       ]}
     >
-      <Pressable style={styles.placeCardTouchable} onPress={onPress}>
+      <Pressable
+        style={styles.placeCardTouchable}
+        onPress={onPress}
+        android_ripple={{ color: "rgba(99, 102, 241, 0.1)" }}
+      >
         <View style={styles.placeImageContainer}>
           <Image
             source={{ uri: imageUrl }}
@@ -163,24 +196,38 @@ const PlaceCard = memo(function PlaceCard({
             resizeMode="cover"
           />
           <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.65)"]}
+            colors={["transparent", "rgba(0,0,0,0.7)"]}
             style={styles.placeImageGradient}
           />
 
-          {!!item.categoryName && (
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeIcon}>📍</Text>
-              <Text style={styles.categoryBadgeText}>{item.categoryName}</Text>
+          {/* Top Badges */}
+          <View style={styles.cardTopRow}>
+            {!!item.categoryName && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryBadgeText}>
+                  {item.categoryName}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.favoriteBtn} activeOpacity={0.8}>
+              <Ionicons name="heart-outline" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom Info on Image */}
+          <View style={styles.cardImageBottom}>
+            <View style={styles.ratingBadge}>
+              <Ionicons name="star" size={12} color="#FBBF24" />
+              <Text style={styles.ratingText}>{ratingText}</Text>
             </View>
-          )}
-
-          <TouchableOpacity style={styles.favoriteBtn} activeOpacity={0.85}>
-            <Ionicons name="heart-outline" size={18} color="#fff" />
-          </TouchableOpacity>
-
-          <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={12} color="#FFD700" />
-            <Text style={styles.ratingText}>{ratingText}</Text>
+            {typeof item.distanceKm === "number" && (
+              <View style={styles.distanceBadge}>
+                <Ionicons name="navigate" size={10} color="#fff" />
+                <Text style={styles.distanceText}>
+                  {item.distanceKm.toFixed(1)} km
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -189,24 +236,11 @@ const PlaceCard = memo(function PlaceCard({
             {item.name}
           </Text>
 
-          <Text style={styles.placeDesc} numberOfLines={2}>
-            {item.description || "สถานที่ท่องเที่ยวยอดนิยม"}
-          </Text>
-
-          <View style={styles.placeFooter}>
-            <View style={styles.locationRow}>
-              <Ionicons name="location" size={14} color="#10B981" />
-              <Text style={styles.locationText} numberOfLines={1}>
-                {item.address || "กาญจนบุรี"}
-              </Text>
-            </View>
-            {typeof item.distanceKm === "number" && (
-              <View >
-                <Text style={styles.distanceText}>
-                  {item.distanceKm.toFixed(1)} กม.
-                </Text>
-              </View>
-            )}
+          <View style={styles.locationRow}>
+            <View style={styles.locationDot} />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {item.address || "กาญจนบุรี"}
+            </Text>
           </View>
         </View>
       </Pressable>
@@ -223,7 +257,7 @@ export default function PlaceListScreen() {
   const [pageSize] = useState(16);
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(
-    null
+    null,
   );
 
   // ใกล้ฉัน
@@ -302,20 +336,21 @@ export default function PlaceListScreen() {
     setNearMeOn(true);
   }, [nearMeOn, userLoc, requestUserLocation]);
 
-const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
-  if (!userLoc) return places.map((p) => ({ ...p, distanceKm: null }));
+  const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
+    if (!userLoc) return places.map((p) => ({ ...p, distanceKm: null }));
 
-  return places.map((p) => {
-    const lat = Number((p as any).latitude);
-    const lng = Number((p as any).longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ...p, distanceKm: null };
+    return places.map((p) => {
+      const lat = Number((p as any).latitude);
+      const lng = Number((p as any).longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        return { ...p, distanceKm: null };
 
-    return {
-      ...p,
-      distanceKm: haversineKm(userLoc.latitude, userLoc.longitude, lat, lng),
-    };
-  });
-}, [places, userLoc]);
+      return {
+        ...p,
+        distanceKm: haversineKm(userLoc.latitude, userLoc.longitude, lat, lng),
+      };
+    });
+  }, [places, userLoc]);
 
   const filteredPlaces: PlaceWithDistance[] = useMemo(() => {
     let arr = placesWithDistance;
@@ -331,7 +366,7 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
         .filter(
           (p) =>
             typeof p.distanceKm === "number" &&
-            (p.distanceKm as number) <= radiusKm
+            (p.distanceKm as number) <= radiusKm,
         )
         .sort((a, b) => (a.distanceKm as number) - (b.distanceKm as number));
     }
@@ -354,7 +389,7 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
 
   const goDetails = useCallback(
     (placeId: number) => navigation.navigate("PlaceDetails", { placeId }),
-    [navigation]
+    [navigation],
   );
 
   const onPressPrev = useCallback(() => {
@@ -382,53 +417,65 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
             {
               translateY: headerAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [-20, 0],
+                outputRange: [-30, 0],
               }),
             },
           ],
         },
       ]}
     >
+      {/* Hero Section - Nature Gradient */}
       <LinearGradient
-        colors={["#1E3A5F", "#2A4D50", "#3D6B6B"]}
+        colors={[COLORS.primary, COLORS.primaryLight, "#34D399"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.heroSection}
       >
-        <View style={styles.heroOverlay}>
-          <View style={styles.heroContent}>
-            <View style={styles.heroIconBadge}>
-              <Text style={styles.heroEmoji}>🗺️</Text>
-            </View>
-            <Text style={styles.heroTitle}>สำรวจสถานที่</Text>
-            <Text style={styles.heroSubtitle}>
-              ค้นพบจุดหมายปลายทางที่น่าประทับใจในกาญจนบุรี
-            </Text>
+        {/* Decorative Pattern */}
+        <View style={styles.heroPattern}>
+          <View style={styles.patternCircle1} />
+          <View style={styles.patternCircle2} />
+          <View style={styles.patternCircle3} />
+        </View>
 
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{total}</Text>
-                <Text style={styles.statLabel}>สถานที่</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{categories.length}</Text>
-                <Text style={styles.statLabel}>หมวดหมู่</Text>
-              </View>
+        <View style={styles.heroContent}>
+          <View style={styles.heroTitleRow}>
+            <View style={styles.heroTextWrap}>
+              <Text style={styles.heroLabel}>ค้นพบ 🗺️</Text>
+              <Text style={styles.heroTitle}>สถานที่ท่องเที่ยว</Text>
+              <Text style={styles.heroSubtitle}>
+                ธรรมชาติงดงามแห่งกาญจนบุรี
+              </Text>
+            </View>
+            <View style={styles.heroIconBadge}>
+              <Ionicons name="compass" size={32} color="#fff" />
+            </View>
+          </View>
+
+          {/* Stats Section */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{total}+</Text>
+              <Text style={styles.statLabel}>สถานที่</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{categories.length}</Text>
+              <Text style={styles.statLabel}>หมวดหมู่</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>4.8</Text>
+              <Text style={styles.statLabel}>คะแนน</Text>
             </View>
           </View>
         </View>
-
-        <View style={styles.decorCircle1} />
-        <View style={styles.decorCircle2} />
       </LinearGradient>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <View style={styles.searchIconWrap}>
-            <Ionicons name="search" size={20} color="#2A4D50" />
-          </View>
+      {/* Floating Search Bar */}
+      <View style={styles.searchWrapper}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={COLORS.textMuted} />
           <TextInput
             value={search}
             onChangeText={(t) => {
@@ -436,7 +483,7 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
               setPage(1);
             }}
             placeholder="ค้นหาสถานที่ที่คุณสนใจ..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textMuted}
             style={styles.searchInput}
             returnKeyType="search"
           />
@@ -446,114 +493,100 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
                 setSearch("");
                 setPage(1);
               }}
-              style={styles.clearSearchBtn}
+              activeOpacity={0.7}
             >
-              <Ionicons name="close-circle" size={22} color="#9CA3AF" />
+              <Ionicons
+                name="close-circle"
+                size={20}
+                color={COLORS.textMuted}
+              />
             </TouchableOpacity>
           )}
-          <View style={styles.searchDivider} />
-          <TouchableOpacity onPress={onRefreshAll} style={styles.refreshBtn}>
-            <Ionicons
-              name={isFetching || catFetching ? "sync" : "refresh"}
-              size={20}
-              color="#2A4D50"
-            />
-          </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={onRefreshAll}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="refresh" size={20} color="#fff" />
+        </TouchableOpacity>
       </View>
 
-      {/* Categories */}
+      {/* Filter Chips - Category */}
       {categories.length > 0 && (
         <View style={styles.filterSection}>
-          <View style={styles.filterHeader}>
-            <View style={styles.filterTitleWrap}>
-              <Text style={styles.filterIcon}>🏷️</Text>
-              <Text style={styles.filterTitle}>หมวดหมู่</Text>
-            </View>
-            {selectedCategoryId !== null && (
-              <TouchableOpacity
-                onPress={() => setSelectedCategoryId(null)}
-                style={styles.clearFilterBtn}
-              >
-                <Text style={styles.clearFilterText}>ล้าง</Text>
-              </TouchableOpacity>
-            )}
+          <Text style={styles.filterTitle}>หมวดหมู่</Text>
+          <View style={styles.filterChipsScroll}>
+            <FlatList
+              horizontal
+              data={categories}
+              keyExtractor={(x) => String(x.categoryId)}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipList}
+              renderItem={({ item }) => (
+                <CategoryChip
+                  name={item.categoryName}
+                  active={item.categoryId === selectedCategoryId}
+                  onPress={() => {
+                    setSelectedCategoryId(
+                      item.categoryId === selectedCategoryId
+                        ? null
+                        : item.categoryId,
+                    );
+                    setPage(1);
+                  }}
+                />
+              )}
+            />
           </View>
-
-          <FlatList
-            horizontal
-            data={categories}
-            keyExtractor={(x) => String(x.categoryId)}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipList}
-            renderItem={({ item }) => (
-              <CategoryChip
-                name={item.categoryName}
-                active={item.categoryId === selectedCategoryId}
-                onPress={() => {
-                  setSelectedCategoryId(
-                    item.categoryId === selectedCategoryId
-                      ? null
-                      : item.categoryId
-                  );
-                  setPage(1);
-                }}
-              />
-            )}
-          />
         </View>
       )}
 
-      {/* Results Bar */}
+      {/* Results Count */}
       <View style={styles.resultsBar}>
-        <View style={styles.resultsLeft}>
-          <View style={styles.resultsIconWrap}>
-            <Ionicons name="compass" size={18} color="#fff" />
-          </View>
-          <Text style={styles.resultsText}>
-            {isLoading || isFetching
-              ? "กำลังค้นหา..."
-              : `พบ ${filteredPlaces.length} สถานที่`}
-          </Text>
-        </View>
+        <Text style={styles.resultsText}>
+          {isLoading || isFetching
+            ? "กำลังโหลด..."
+            : `พบ ${filteredPlaces.length} สถานที่`}
+        </Text>
 
-        <View style={styles.resultsRight}>
+        <View style={styles.filterActions}>
           <TouchableOpacity
             onPress={toggleNearMe}
-            activeOpacity={0.85}
-            style={[styles.nearMeBtn, nearMeOn && styles.nearMeBtnActive]}
+            style={[styles.actionChip, nearMeOn && styles.actionChipActive]}
+            activeOpacity={0.8}
           >
             <Ionicons
-              name={nearMeOn ? "navigate" : "navigate-outline"}
+              name={nearMeOn ? "locate" : "locate-outline"}
               size={16}
-              color={nearMeOn ? "#fff" : "#0EA5E9"}
+              color={nearMeOn ? "#fff" : COLORS.primary}
             />
             <Text
-              style={[styles.nearMeText, nearMeOn && styles.nearMeTextActive]}
+              style={[
+                styles.actionChipText,
+                nearMeOn && styles.actionChipTextActive,
+              ]}
             >
-              {locLoading ? "กำลังหา..." : "ใกล้ฉัน"}
+              {locLoading ? "..." : "ใกล้ฉัน"}
             </Text>
           </TouchableOpacity>
 
           {hasFilters && (
             <TouchableOpacity
               onPress={resetAll}
-              style={styles.clearAllBtn}
-              activeOpacity={0.85}
+              style={styles.resetChip}
+              activeOpacity={0.8}
             >
-              <Ionicons name="trash-outline" size={16} color="#DC2626" />
-              <Text style={styles.clearAllText}>ล้าง</Text>
+              <Ionicons name="refresh" size={14} color="#EF4444" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       {(isLoading || isFetching) && (
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingDots}>
-            <ActivityIndicator size="small" color="#2A4D50" />
-            <Text style={styles.loadingText}>กำลังโหลดสถานที่...</Text>
-          </View>
+        <View style={styles.loadingBar}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
         </View>
       )}
     </Animated.View>
@@ -561,36 +594,33 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
 
   const Empty = (
     <View style={styles.emptyState}>
-      <LinearGradient
-        colors={["#F0F9FF", "#E0F2FE"]}
-        style={styles.emptyGradient}
-      >
+      <View style={styles.emptyContent}>
         <View style={styles.emptyIconWrap}>
-          <Text style={styles.emptyEmoji}>🔍</Text>
+          <Ionicons name="search" size={48} color={COLORS.primary} />
         </View>
         <Text style={styles.emptyTitle}>ไม่พบสถานที่</Text>
         <Text style={styles.emptyDesc}>
           {hasFilters
-            ? "ลองเปลี่ยนคำค้นหาหรือตัวกรองที่ใช้ดูนะคะ"
-            : "ไม่มีข้อมูลสถานที่ในขณะนี้"}
+            ? "ลองเปลี่ยนคำค้นหาหรือตัวกรองใหม่"
+            : "ยังไม่มีข้อมูลสถานที่"}
         </Text>
         {hasFilters && (
           <TouchableOpacity
             onPress={resetAll}
             style={styles.emptyBtn}
-            activeOpacity={0.85}
+            activeOpacity={0.8}
           >
             <Ionicons name="refresh" size={18} color="#fff" />
             <Text style={styles.emptyBtnText}>ล้างตัวกรอง</Text>
           </TouchableOpacity>
         )}
-      </LinearGradient>
+      </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="light-content" backgroundColor="#65fbcc" />
       <View style={styles.page}>
         <FlatList
           ref={flatListRef}
@@ -623,29 +653,19 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
                   disabled={page <= 1}
                   onPress={onPressPrev}
                   style={[styles.pageBtn, page <= 1 && styles.pageBtnDisabled]}
-                  activeOpacity={0.85}
+                  activeOpacity={0.8}
                 >
                   <Ionicons
                     name="chevron-back"
-                    size={20}
-                    color={page <= 1 ? "#D1D5DB" : "#fff"}
+                    size={18}
+                    color={page <= 1 ? COLORS.textMuted : "#fff"}
                   />
-                  <Text
-                    style={[
-                      styles.pageBtnText,
-                      page <= 1 && styles.pageBtnTextDisabled,
-                    ]}
-                  >
-                    ก่อนหน้า
-                  </Text>
                 </TouchableOpacity>
 
-                <View style={styles.pageIndicator}>
-                  <Text style={styles.pageText}>
-                    <Text style={styles.pageNumber}>{page}</Text>
-                    <Text style={styles.pageSeparator}> / </Text>
-                    <Text style={styles.pageNumber}>{totalPages}</Text>
-                  </Text>
+                <View style={styles.pageInfo}>
+                  <Text style={styles.pageText}>{page}</Text>
+                  <Text style={styles.pageSep}>/</Text>
+                  <Text style={styles.pageTotal}>{totalPages}</Text>
                 </View>
 
                 <TouchableOpacity
@@ -655,24 +675,18 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
                     styles.pageBtn,
                     page >= totalPages && styles.pageBtnDisabled,
                   ]}
-                  activeOpacity={0.85}
+                  activeOpacity={0.8}
                 >
-                  <Text
-                    style={[
-                      styles.pageBtnText,
-                      page >= totalPages && styles.pageBtnTextDisabled,
-                    ]}
-                  >
-                    ถัดไป
-                  </Text>
                   <Ionicons
                     name="chevron-forward"
-                    size={20}
-                    color={page >= totalPages ? "#D1D5DB" : "#fff"}
+                    size={18}
+                    color={page >= totalPages ? COLORS.textMuted : "#fff"}
                   />
                 </TouchableOpacity>
               </View>
-            ) : null
+            ) : (
+              <View style={{ height: 20 }} />
+            )
           }
         />
       </View>
@@ -681,397 +695,427 @@ const placesWithDistance: PlaceWithDistance[] = useMemo(() => {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F8FAFC" },
+  safe: { flex: 1, backgroundColor: COLORS.background },
   page: { flex: 1 },
-
-  headerWrap: { paddingBottom: 8 },
-
+  headerWrap: { paddingBottom: 12, width: SCREEN_WIDTH, alignSelf: "center" },
+  // Hero Section
   heroSection: {
-    paddingTop: 24,
-    paddingBottom: 40,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    overflow: "hidden",
+    paddingTop: 20,
+    paddingBottom: 50,
     position: "relative",
+    overflow: "hidden",
+    width: "100%",
   },
-  heroOverlay: { zIndex: 1 },
-  heroContent: { alignItems: "center", paddingHorizontal: 24 },
-  heroIconBadge: {
+  heroPattern: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  patternCircle1: {
+    position: "absolute",
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  patternCircle2: {
+    position: "absolute",
+    bottom: -30,
+    left: -30,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  patternCircle3: {
+    position: "absolute",
+    top: 40,
+    left: "40%",
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  heroEmoji: { fontSize: 40 },
-  heroTitle: {
-    fontSize: 32,
-    fontWeight: "900",
-    color: "#fff",
-    marginBottom: 8,
-    textShadowColor: "rgba(0,0,0,0.2)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+  heroContent: {
+    paddingHorizontal: 20,
+    zIndex: 1,
   },
-  heroSubtitle: {
-    fontSize: 15,
-    color: "rgba(255, 255, 255, 0.9)",
-    textAlign: "center",
-    lineHeight: 22,
+  heroTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 20,
   },
-
-  statsRow: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+  heroTextWrap: {
+    flex: 1,
   },
-  statItem: { flex: 1, alignItems: "center" },
-  statNumber: { fontSize: 24, fontWeight: "900", color: "#fff" },
+  heroLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.85)",
+    marginBottom: 4,
+  },
+  heroTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.9)",
+    lineHeight: 20,
+  },
+  heroIconBadge: {
+    width: 70,
+    height: 70,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#fff",
+  },
   statLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "rgba(255,255,255,0.9)",
     marginTop: 2,
   },
   statDivider: {
     width: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    marginVertical: 4,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    marginHorizontal: 8,
   },
 
-  decorCircle1: {
-    position: "absolute",
-    top: -40,
-    right: -40,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+  // Search
+  searchWrapper: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    marginTop: -28,
+    gap: 12,
   },
-  decorCircle2: {
-    position: "absolute",
-    bottom: -20,
-    left: -30,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-  },
-
-  searchContainer: { paddingHorizontal: 20, marginTop: -28, marginBottom: 20 },
-  searchBar: {
+  searchContainer: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    shadowColor: "#1E3A5F",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
-    shadowRadius: 20,
+    shadowRadius: 24,
     elevation: 8,
-  },
-  searchIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#F0F9FF",
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 12,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
     fontWeight: "600",
-    color: "#1F2937",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    color: COLORS.text,
   },
-  clearSearchBtn: { padding: 8 },
-  searchDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: "#E5E7EB",
-    marginHorizontal: 4,
-  },
-  refreshBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#F0F9FF",
+  filterButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
 
-  filterSection: { marginBottom: 16 },
-  filterHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  // Filter Section
+  filterSection: {
+    marginTop: 24,
     paddingHorizontal: 20,
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.text,
     marginBottom: 12,
   },
-  filterTitleWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-  filterIcon: { fontSize: 18 },
-  filterTitle: { fontSize: 16, fontWeight: "800", color: "#1F2937" },
-  clearFilterBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#FEF2F2",
+  filterChipsScroll: {},
+  chipList: {
+    gap: 10,
   },
-  clearFilterText: { fontSize: 12, fontWeight: "700", color: "#DC2626" },
-  chipList: { paddingHorizontal: 20, gap: 10 },
-
   categoryChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: "#fff",
-    borderWidth: 2,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
   },
-  categoryChipActive: { backgroundColor: "#1E3A5F", borderColor: "#1E3A5F" },
-  categoryChipIcon: { fontSize: 18 },
-  categoryChipText: { fontSize: 14, fontWeight: "700", color: "#374151" },
-  categoryChipTextActive: { color: "#fff" },
-  chipCheckmark: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
+  categoryChipIcon: {
+    fontSize: 14,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  categoryChipTextActive: {
+    color: "#fff",
   },
 
+  // Results Bar
   resultsBar: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginTop: 16,
+    marginBottom: 8,
   },
-  resultsLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  resultsRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  resultsIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "#2A4D50",
-    alignItems: "center",
-    justifyContent: "center",
+  resultsText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
   },
-  resultsText: { fontSize: 15, fontWeight: "800", color: "#1F2937" },
-
-  nearMeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#E0F2FE",
-    borderWidth: 1,
-    borderColor: "#7DD3FC",
-  },
-  nearMeBtnActive: { backgroundColor: "#0284C7", borderColor: "#0284C7" },
-  nearMeText: { fontSize: 13, fontWeight: "900", color: "#0284C7" },
-  nearMeTextActive: { color: "#fff" },
-
-  clearAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  clearAllText: { fontSize: 13, fontWeight: "800", color: "#DC2626" },
-
-  loadingContainer: { paddingVertical: 16, alignItems: "center" },
-  loadingDots: {
+  filterActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#F0F9FF",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
   },
-  loadingText: { fontSize: 13, fontWeight: "700", color: "#2A4D50" },
+  actionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  actionChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  actionChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  actionChipTextActive: {
+    color: "#fff",
+  },
+  resetChip: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#FEF2F2",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
 
-  columnWrapper: { gap: 12 },
-  listContent: { paddingHorizontal: 20, gap: 12, paddingBottom: 20 },
+  // Loading
+  loadingBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
 
+  // List
+  columnWrapper: {
+    gap: 12,
+  },
+  listContent: {
+    paddingHorizontal: 18,
+    paddingBottom: 100,
+    gap: 12,
+  },
+
+  // Place Card
   placeCard: {
     width: CARD_WIDTH,
     backgroundColor: "#fff",
-    borderRadius: 24,
+    borderRadius: 20,
     overflow: "hidden",
-    shadowColor: "#1E3A5F",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  placeCardTouchable: { flex: 1 },
+  placeCardTouchable: {
+    flex: 1,
+  },
   placeImageContainer: {
-    height: 150,
-    backgroundColor: "#E5E7EB",
-    position: "relative",
+    height: 140,
+    backgroundColor: COLORS.border,
   },
-  placeImage: { width: "100%", height: "100%" },
+  placeImage: {
+    width: "100%",
+    height: "100%",
+  },
   placeImageGradient: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: "60%",
+    height: "50%",
   },
-
+  cardTopRow: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    right: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   categoryBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  categoryBadgeIcon: { fontSize: 12 },
-  categoryBadgeText: { fontSize: 11, fontWeight: "800", color: "#1E3A5F" },
-
-  favoriteBtn: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-
-  ratingBadge: {
-    position: "absolute",
-    bottom: 12,
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(255,255,255,0.95)",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
   },
-  ratingText: { fontSize: 12, fontWeight: "800", color: "#fff" },
-
-  placeContent: { padding: 16, gap: 8 },
-  placeName: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#1F2937",
-    lineHeight: 20,
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: COLORS.text,
   },
-  placeDesc: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#6B7280",
-    lineHeight: 18,
-  },
-
-  placeFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    marginTop: 4,
-  },
-  locationRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 4 },
-  locationText: { flex: 1, fontSize: 12, fontWeight: "700", color: "#10B981" },
-
-  footerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  distancePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#E0F2FE",
-    borderWidth: 1,
-    borderColor: "#7DD3FC",
-  },
-  distanceText: { fontSize: 11, fontWeight: "900", color: "#0284C7" },
-
-  arrowBtn: {
+  favoriteBtn: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "#F0F9FF",
+    backgroundColor: "rgba(0,0,0,0.3)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  cardImageBottom: {
+    position: "absolute",
+    bottom: 10,
+    left: 10,
+    right: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  ratingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  distanceText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  placeContent: {
+    padding: 14,
+  },
+  placeName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.text,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  locationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.accent,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
   },
 
-  emptyState: { paddingVertical: 40, paddingHorizontal: 20 },
-  emptyGradient: {
-    paddingVertical: 48,
-    paddingHorizontal: 32,
-    borderRadius: 28,
+  // Empty State
+  emptyState: {
+    paddingVertical: 60,
+    paddingHorizontal: 40,
     alignItems: "center",
-    gap: 12,
+  },
+  emptyContent: {
+    alignItems: "center",
   },
   emptyIconWrap: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#fff",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#ECFDF5",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
-    shadowColor: "#1E3A5F",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    marginBottom: 20,
   },
-  emptyEmoji: { fontSize: 56 },
-  emptyTitle: { fontSize: 22, fontWeight: "900", color: "#1F2937" },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: 8,
+  },
   emptyDesc: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#6B7280",
+    fontWeight: "500",
+    color: COLORS.textSecondary,
     textAlign: "center",
     lineHeight: 22,
   },
@@ -1079,47 +1123,59 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#2A4D50",
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 16,
-    marginTop: 12,
-    shadowColor: "#2A4D50",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    borderRadius: 14,
+    marginTop: 20,
   },
-  emptyBtnText: { fontSize: 15, fontWeight: "800", color: "#fff" },
+  emptyBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#fff",
+  },
 
+  // Pagination
   pagination: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: "transparent",
+    gap: 16,
+    paddingVertical: 24,
   },
   pageBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pageBtnDisabled: {
+    backgroundColor: COLORS.border,
+  },
+  pageInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: "#2A4D50",
-  },
-  pageBtnDisabled: { backgroundColor: "#F3F4F6" },
-  pageBtnText: { fontSize: 13, fontWeight: "800", color: "#fff" },
-  pageBtnTextDisabled: { color: "#9CA3AF" },
-  pageIndicator: {
+    backgroundColor: "#ECFDF5",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: "#F0F9FF",
+    gap: 4,
   },
-  pageText: { fontSize: 14, fontWeight: "700" },
-  pageNumber: { fontWeight: "900", color: "#2A4D50" },
-  pageSeparator: { fontWeight: "600", color: "#9CA3AF" },
+  pageText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: COLORS.primary,
+  },
+  pageSep: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.textMuted,
+  },
+  pageTotal: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
 });

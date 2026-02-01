@@ -2,7 +2,12 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 import type { ApiResponse } from "../../api/ApiResponse";
 import { baseQueryWithReauth } from "../../api/baseQuery";
 import type { PagedResult } from "../../interfaces/PagedResult";
-import type { CreatePlaceRequest, DishForPlaceDto, PlaceDto, UpsertPlaceDishPayload } from "./placeTypes";
+import type {
+  CreatePlaceRequest,
+  DishForPlaceDto,
+  PlaceDto,
+  UpsertPlaceDishPayload,
+} from "./placeTypes";
 
 export type RNFile = {
   uri: string;
@@ -27,7 +32,7 @@ export const placeApi = createApi({
       transformResponse: (response: ApiResponse<PagedResult<PlaceDto>>) => {
         if (!response.isSuccess || !response.result) {
           throw new Error(
-            response.errorMessages?.[0] ?? "โหลดสถานที่ไม่สำเร็จ"
+            response.errorMessages?.[0] ?? "โหลดสถานที่ไม่สำเร็จ",
           );
         }
         return response.result;
@@ -40,7 +45,7 @@ export const placeApi = createApi({
       transformResponse: (response: ApiResponse<PlaceDto>) => {
         if (!response.isSuccess || !response.result) {
           throw new Error(
-            response.errorMessages?.[0] ?? "โหลดสถานที่ไม่สำเร็จ"
+            response.errorMessages?.[0] ?? "โหลดสถานที่ไม่สำเร็จ",
           );
         }
         return response.result;
@@ -54,7 +59,7 @@ export const placeApi = createApi({
       transformResponse: (response: ApiResponse<PlaceDto>) => {
         if (!response.isSuccess || !response.result) {
           throw new Error(
-            response.errorMessages?.[0] ?? "เพิ่มสถานที่ไม่สำเร็จ"
+            response.errorMessages?.[0] ?? "เพิ่มสถานที่ไม่สำเร็จ",
           );
         }
         return response.result;
@@ -113,7 +118,7 @@ export const placeApi = createApi({
       }),
       invalidatesTags: ["Place"],
     }),
-      getDishesByPlaceId: builder.query<DishForPlaceDto[], number>({
+    getDishesByPlaceId: builder.query<DishForPlaceDto[], number>({
       query: (placeId) => `/place/${placeId}/dishes`,
       transformResponse: (res: ApiResponse<DishForPlaceDto[]>) => {
         if (!res.isSuccess)
@@ -142,7 +147,7 @@ export const placeApi = createApi({
         method: "DELETE",
       }),
       invalidatesTags: ["Place"],
-    }),   
+    }),
   }),
 });
 

@@ -13,18 +13,6 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-function toAbsoluteUrl(path?: string | null) {
-  if (!path) return "";
-  if (path.startsWith("http")) return path;
-  // รองรับทั้ง "/uploads/..." และ "uploads/..."
-  return path.startsWith("/") ? `${BASE_URL}${path}` : `${BASE_URL}/${path}`;
-}
-
-export function getPlaceImageUrl(place: PlaceDto) {
-  const cover = getCoverImage(place);
-  const url = cover?.imageUrl ? toAbsoluteUrl(cover.imageUrl) : "";
-  return url || "https://via.placeholder.com/400x300?text=No+Image";
-}
 
 export function buildUniqueCategories(places: PlaceDto[]) {
   return [...new Set(places.map((p) => p.categoryName).filter(isNonEmptyString))];
